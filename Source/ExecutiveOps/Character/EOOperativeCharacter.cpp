@@ -5,6 +5,7 @@
 #include "Character/EOTraversalComponent.h"
 #include "Combat/EOGuardCharacter.h"
 #include "Combat/EOHealthComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Mission/EOInteractableInterface.h"
 #include "EngineUtils.h"
 #include "Components/CapsuleComponent.h"
@@ -153,7 +154,8 @@ void AEOOperativeCharacter::UpdateWeaponAttachment(float DeltaSeconds)
 	ApplyWeaponAttachment(bWantsDrawn);
 }
 
-void AEOOperativeCharacter::HandleDamaged(float Amount, AActor* DamageInstigator)
+void AEOOperativeCharacter::HandleDamaged(float Amount, AActor* DamageInstigator,
+	const UDamageType* DamageType)
 {
 	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
 	if (!Feedback || !Health)
@@ -350,21 +352,24 @@ bool AEOOperativeCharacter::FireWeapon()
 		ECC_Pawn, Params))
 	{
 		AActor* HitActor = Hit.GetActor();
-		UEOHealthComponent* HitHealth = HitActor
-			? HitActor->FindComponentByClass<UEOHealthComponent>()
-			: nullptr;
 
-		if (HitHealth)
-		{
-			HitHealth->ApplyDamage(WeaponDamage, this);
-		}
+		// Damage goes out through the engine rather than by finding a health
+		// component and poking it. Anything that can take damage takes it; the
+		// shot no longer needs to know what it hit.
+		UGameplayStatics::ApplyPointDamage(HitActor, WeaponDamage, Direction, Hit,
+			GetController(), this, nullptr);
 
 		if (Feedback)
 		{
+			// The lookup survives only as a presentation question - flesh or
+			// concrete - not as the route damage takes.
+			const bool bHitCharacter = HitActor
+				&& HitActor->FindComponentByClass<UEOHealthComponent>() != nullptr;
+
 			FEOFeedbackContext Impact = FEOFeedbackContext::At(Hit.ImpactPoint);
 			Impact.Rotation = Hit.ImpactNormal.Rotation();
 			Impact.Target = HitActor;
-			Feedback->Play(SurfaceEventFor(Hit, HitHealth != nullptr), Impact);
+			Feedback->Play(SurfaceEventFor(Hit, bHitCharacter), Impact);
 		}
 	}
 

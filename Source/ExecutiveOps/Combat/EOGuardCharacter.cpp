@@ -3,6 +3,8 @@
 #include "Animation/AnimSequence.h"
 #include "Character/EOOperativeCharacter.h"
 #include "Combat/EOHealthComponent.h"
+#include "Combat/EOTakedownDamageType.h"
+#include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EngineUtils.h"
@@ -163,9 +165,17 @@ FVector AEOGuardCharacter::GetPursuitLocation() const
 	return (bTargetVisible && Target) ? Target->GetActorLocation() : LastKnownTargetLocation;
 }
 
-void AEOGuardCharacter::HandleDamaged(float Amount, AActor* DamageInstigator)
+void AEOGuardCharacter::HandleDamaged(float Amount, AActor* DamageInstigator,
+	const UDamageType* DamageType)
 {
 	if (State == EEOGuardState::Dead)
+	{
+		return;
+	}
+
+	// A takedown is silent by definition. Reacting to it would have the guard
+	// turn toward its own killer, which is the whole thing stealth is for.
+	if (DamageType && DamageType->IsA<UEOTakedownDamageType>())
 	{
 		return;
 	}
@@ -492,11 +502,12 @@ void AEOGuardCharacter::FireAtTarget()
 
 	if (HitActor)
 	{
-		if (UEOHealthComponent* HitHealth = HitActor->FindComponentByClass<UEOHealthComponent>())
-		{
-			HitHealth->ApplyDamage(ShotDamage, this);
-			bHitTarget = true;
-		}
+		// Same route the operative's shots take: hand it to the engine and let
+		// whatever was hit decide whether it can be hurt.
+		bHitTarget = HitActor->FindComponentByClass<UEOHealthComponent>() != nullptr;
+
+		UGameplayStatics::ApplyPointDamage(HitActor, ShotDamage, Direction, Hit,
+			GetController(), this, nullptr);
 	}
 
 	if (Feedback && !bHitTarget)
@@ -587,10 +598,17 @@ bool AEOGuardCharacter::CanBeTakenDownBy(const AActor* Attacker) const
 
 void AEOGuardCharacter::Takedown(AActor* Attacker)
 {
-	if (Health)
+	if (!Health || Health->IsDead())
 	{
-		Health->Kill(Attacker);
+		return;
 	}
+
+	// Lethal by definition, so more than enough damage to finish the job whatever
+	// the guard's health. The damage type is what makes this a takedown rather
+	// than a shot, and it is why HandleDamaged below does not react to it.
+	UGameplayStatics::ApplyDamage(this, Health->GetMaxHealth() * 2.f,
+		Attacker ? Attacker->GetInstigatorController() : nullptr, Attacker,
+		UEOTakedownDamageType::StaticClass());
 }
 
 void AEOGuardCharacter::HandleDied(AActor* Killer)

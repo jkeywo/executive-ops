@@ -70,7 +70,7 @@ protected:
 
 	/** Damage is the one event the player must be able to locate, not just hear. */
 	UFUNCTION()
-	void HandleDamaged(float Amount, AActor* DamageInstigator);
+	void HandleDamaged(float Amount, AActor* DamageInstigator, const UDamageType* DamageType);
 
 	/** Picks the impact preset for what the shot actually hit. */
 	static FGameplayTag SurfaceEventFor(const FHitResult& Hit, bool bHitCharacter);

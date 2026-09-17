@@ -891,7 +891,7 @@ void UEOSelfTest::Step()
 			Mission->CompleteDeployment();
 		}
 
-		Op->GetHealth()->Kill(Guard);
+		Op->GetHealth()->ApplyDamage(Op->GetHealth()->GetMaxHealth() * 2.f, Guard);
 		Check(Op->IsDead(), TEXT("the player can be killed"));
 		Check(Mission && Mission->GetMissionState() == EEOMissionState::Failed,
 			TEXT("the player dying fails the mission"));

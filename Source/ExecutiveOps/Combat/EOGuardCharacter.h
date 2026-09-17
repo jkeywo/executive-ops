@@ -91,7 +91,7 @@ protected:
 
 	/** Being shot is information. A hit from behind must not go unnoticed. */
 	UFUNCTION()
-	void HandleDamaged(float Amount, AActor* DamageInstigator);
+	void HandleDamaged(float Amount, AActor* DamageInstigator, const UDamageType* DamageType);
 
 	/** Line of sight plus cone plus range. */
 	bool CheckVision(AActor*& OutSeen) const;

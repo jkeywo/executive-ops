@@ -92,3 +92,30 @@ both paths call.
   Checked that no override was lost: `m0_setup.py`'s aircraft configuration sets
   only the HUD screen material, so the Blueprint never carried a value for it.
 
+### C2 - Deepen the weapon out of the operative  *(partially done)*
+
+**Done: damage goes through Unreal's pipeline.** Both shooters call
+`UGameplayStatics::ApplyPointDamage`; `UEOHealthComponent` binds its owner's
+`OnTakeAnyDamage` instead of exposing a method for shooters to find and call.
+Neither shooter looks for a health component to decide whether it can hurt
+something any more.
+
+The takedown was the subtle part. It used to bypass damage entirely - `Kill()`
+fired `OnDied` but never `OnDamaged`, and that absence was what stopped a silent
+kill triggering the guard's "someone shot me" reaction. With one route in, the
+distinction is carried by `UEOTakedownDamageType` and the guard ignores damage of
+that type. The behaviour is identical; the reason it works is now data on the
+event rather than a choice of function.
+
+- **[autonomous]** `Kill()` is deleted rather than kept alongside. Two doors into
+  the same state is the shape this whole review keeps flagging, and the takedown
+  was its only caller.
+- **[autonomous]** `ApplyDamage` stays public, documented as the direct route for
+  the reset command and the tests, which need a deterministic poke that does not
+  depend on an event being routed. Gameplay does not use it.
+- **[autonomous]** `FindComponentByClass` survives in the operative's shot, but
+  only to choose between a flesh and a concrete impact preset. That is a
+  presentation question, not the route damage takes.
+
+**Not done: extracting UEOWeaponComponent.** See the end of this log.
+
