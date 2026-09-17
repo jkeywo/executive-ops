@@ -1,6 +1,7 @@
 #include "Debug/EOSelfTest.h"
 
 #include "Aircraft/EOAircraftPawn.h"
+#include "Camera/CameraComponent.h"
 #include "Character/EOOperativeCharacter.h"
 #include "Combat/EOGuardCharacter.h"
 #include "Combat/EOHealthComponent.h"
@@ -873,7 +874,11 @@ void UEOSelfTest::Step()
 		// different place every run, and the aim trace can slip past it.
 		Guard->ResetGuard();
 
-		Op->SetActorLocation(Guard->GetActorLocation() + Guard->GetActorForwardVector() * 900.f,
+		// Close range on purpose. Hip spread is 4.5 degrees - at 9m that cone is
+		// +/-71cm against a 42cm capsule, so a single shot misses more often than
+		// it lands however well it is aimed. At 3m the cone is narrower than the
+		// target, so the check measures the damage path instead of the dice.
+		Op->SetActorLocation(Guard->GetActorLocation() + Guard->GetActorForwardVector() * 300.f,
 			false, nullptr, ETeleportType::TeleportPhysics);
 
 		// The weapon aims where the CAMERA looks, and the camera boom follows the
@@ -908,16 +913,22 @@ void UEOSelfTest::Step()
 		FRotator ViewRotation;
 		Controller->GetPlayerViewPoint(ViewLocation, ViewRotation);
 
-		FCollisionQueryParams AimParams(SCENE_QUERY_STAT(EOSelfTestAim), false, Op);
+		// How close the aim ray passes to the guard's centre line, not merely
+		// whether it clips the capsule. Stopping at the first grazing hit centres
+		// the weapon's spread cone on the rim, and half the cone then falls
+		// outside the target.
+		const FVector ToGuard = Guard->GetActorLocation() - ViewLocation;
+		const FVector AimDirection = ViewRotation.Vector();
+		const float MissDistance =
+			FVector::CrossProduct(ToGuard, AimDirection).Size() / FMath::Max(AimDirection.Size(), KINDA_SMALL_NUMBER);
 
-		FHitResult AimHit;
-		const bool bOnTarget = Controller->GetWorld()->LineTraceSingleByChannel(
-			AimHit, ViewLocation, ViewLocation + ViewRotation.Vector() * 6000.f,
-			ECC_Pawn, AimParams) && AimHit.GetActor() == Guard;
+		const bool bOnTarget = MissDistance < 15.f;
 
 		if (bOnTarget || PhaseElapsed > 3.f)
 		{
-			Check(bOnTarget, TEXT("the crosshair can be put on the guard"));
+			Check(bOnTarget,
+				FString::Printf(TEXT("the crosshair settles on the guard (%.0fcm off centre)"),
+					MissDistance));
 
 			// Fire on this exact step. The follow camera has positional lag and
 			// is still easing after the teleport, so waiting even a tenth of a
