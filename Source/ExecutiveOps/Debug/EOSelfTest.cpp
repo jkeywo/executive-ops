@@ -1,6 +1,7 @@
 #include "Debug/EOSelfTest.h"
 
 #include "Aircraft/EOAircraftPawn.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Character/EOOperativeCharacter.h"
 #include "Combat/EOGuardCharacter.h"
@@ -678,6 +679,54 @@ void UEOSelfTest::Step()
 			}
 		}
 
+		Advance(EPhase::MeshDriftRun, 0.2f);
+		break;
+	}
+
+	case EPhase::MeshDriftRun:
+	{
+		// The locomotion clips carry real root motion - the jog loop travels 22
+		// metres - and single-node playback evaluates the root bone without
+		// consuming it. Unlocked, that walks the rendered model clean off the
+		// capsule the game is actually moving, and no other check here would
+		// notice, because every one of them reads the capsule.
+		//
+		// Each clip is posed directly rather than run through the character:
+		// waiting for the operative to accelerate into a jog made the check
+		// measure an idle standing still, which passed and proved nothing.
+		AEOOperativeCharacter* Op = GetOperative();
+		USkeletalMeshComponent* MeshComp = Op ? Op->GetMesh() : nullptr;
+
+		Check(MeshComp != nullptr, TEXT("operative has a mesh to check"));
+		if (MeshComp)
+		{
+			const TArray<UAnimSequence*> Clips = Op->GetLocomotionClips();
+			Check(Clips.Num() >= 3, FString::Printf(
+				TEXT("the locomotion clips are assigned (%d)"), Clips.Num()));
+
+			for (UAnimSequence* Clip : Clips)
+			{
+				MeshComp->PlayAnimation(Clip, false);
+
+				// Most of the way through, where a clip that travels has travelled.
+				MeshComp->SetPosition(Clip->GetPlayLength() * 0.9f, false);
+				MeshComp->RefreshBoneTransforms();
+
+				const FVector RootWorld =
+					MeshComp->GetBoneLocation(TEXT("root"), EBoneSpaces::WorldSpace);
+				const float Drift = FVector::Dist(RootWorld, MeshComp->GetComponentLocation());
+
+				Check(Drift < 25.f, FString::Printf(
+					TEXT("%s keeps its root on the capsule (%.0fcm)"), *Clip->GetName(), Drift));
+			}
+		}
+
+		Advance(EPhase::MeshDriftCheck, 0.2f);
+		break;
+	}
+
+	case EPhase::MeshDriftCheck:
+	{
 		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M5: one guard --"));
 
 		// The traversal checks teleport the operative across the whole route, so

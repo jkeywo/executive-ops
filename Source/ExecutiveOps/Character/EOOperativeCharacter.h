@@ -193,11 +193,15 @@ protected:
 	TObjectPtr<UAnimSequence> AimStrafeRight;
 
 	/**
-	 * Ground speed each locomotion clip was authored at.
+	 * Fallback ground speed for a locomotion clip, used only when the clip has no
+	 * root travel to measure.
 	 *
-	 * Clips play at a fixed rate, so a run cycle authored for 8m/s looks like
+	 * Clips play at a fixed rate, so a run cycle authored for 3.3m/s looks like
 	 * slow motion while the operative is still accelerating. Scaling the play
-	 * rate by actual speed keeps the feet with the ground.
+	 * rate by actual speed keeps the feet with the ground - but only if the
+	 * authored speed is right, and hand-entered numbers here were wrong by up to
+	 * a factor of two. GetClipSpeed measures the real figure off the asset; these
+	 * remain for in-place clips, which have nothing to measure.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
 	float WalkAnimSpeed = 160.f;
@@ -307,6 +311,14 @@ protected:
 	float StickLookRate = 140.f;
 
 public:
+	/**
+	 * Every clip driven by ground speed, for checks that care about all of them.
+	 *
+	 * These are the clips whose root motion has to stay locked: they are the ones
+	 * with metres of travel baked into the root track.
+	 */
+	TArray<UAnimSequence*> GetLocomotionClips() const;
+
 	UFUNCTION(BlueprintPure, Category = "Deployment")
 	bool IsStowed() const { return bStowed; }
 
@@ -427,6 +439,17 @@ private:
 	float MoveInputHoldRemaining = 0.f;
 	float FireCooldown = 0.f;
 	float TakedownRemaining = 0.f;
+
+	/**
+	 * Ground speed a clip actually travels at, measured off its root track.
+	 *
+	 * Measured once per clip and kept, because extraction decompresses the whole
+	 * root track and this runs every frame.
+	 */
+	float GetClipSpeed(UAnimSequence* Clip, float Fallback);
+
+	UPROPERTY(Transient)
+	TMap<TObjectPtr<UAnimSequence>, float> MeasuredClipSpeeds;
 
 	/** The clip currently playing, so the same one is not restarted every frame. */
 	UPROPERTY(Transient)

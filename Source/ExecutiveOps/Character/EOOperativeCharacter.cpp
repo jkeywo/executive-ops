@@ -761,7 +761,7 @@ void AEOOperativeCharacter::UpdateLocomotionAnimation()
 			}
 			else
 			{
-				ClipSpeed = StrafeAnimSpeed;
+				ClipSpeed = GetClipSpeed(Wanted, StrafeAnimSpeed);
 			}
 		}
 	}
@@ -783,17 +783,17 @@ void AEOOperativeCharacter::UpdateLocomotionAnimation()
 		else if (Speed > SprintSpeed * 0.9f)
 		{
 			Wanted = SprintAnim;
-			ClipSpeed = SprintAnimSpeed;
+			ClipSpeed = GetClipSpeed(SprintAnim, SprintAnimSpeed);
 		}
 		else if (Speed > WalkSpeed * 0.6f)
 		{
 			Wanted = JogAnim;
-			ClipSpeed = JogAnimSpeed;
+			ClipSpeed = GetClipSpeed(JogAnim, JogAnimSpeed);
 		}
 		else
 		{
 			Wanted = WalkAnim;
-			ClipSpeed = WalkAnimSpeed;
+			ClipSpeed = GetClipSpeed(WalkAnim, WalkAnimSpeed);
 		}
 	}
 
@@ -817,6 +817,55 @@ void AEOOperativeCharacter::UpdateLocomotionAnimation()
 	{
 		MeshComp->SetPlayRate(1.f);
 	}
+}
+
+TArray<UAnimSequence*> AEOOperativeCharacter::GetLocomotionClips() const
+{
+	TArray<UAnimSequence*> Clips;
+	for (UAnimSequence* Clip : { WalkAnim.Get(), JogAnim.Get(), SprintAnim.Get() })
+	{
+		if (Clip)
+		{
+			Clips.Add(Clip);
+		}
+	}
+	return Clips;
+}
+
+float AEOOperativeCharacter::GetClipSpeed(UAnimSequence* Clip, float Fallback)
+{
+	if (!Clip)
+	{
+		return Fallback;
+	}
+
+	if (const float* Cached = MeasuredClipSpeeds.Find(Clip))
+	{
+		return *Cached;
+	}
+
+	// How far the root actually travels over the clip, which is the only honest
+	// answer to "what speed was this authored at". The hand-entered numbers this
+	// replaced were out by up to a factor of two - the sprint loop was listed at
+	// 800 cm/s and covers 415 - which is why the run cycle never matched the
+	// ground underneath it.
+	float Speed = Fallback;
+	const float Length = Clip->GetPlayLength();
+	if (Length > KINDA_SMALL_NUMBER)
+	{
+		const FTransform Delta = Clip->ExtractRootMotionFromRange(0.0, Length, FAnimExtractContext());
+		const float Distance = Delta.GetTranslation().Size2D();
+
+		// An in-place clip has nothing to measure; fall back rather than divide a
+		// few centimetres of foot jitter into a speed.
+		if (Distance > 10.f)
+		{
+			Speed = Distance / Length;
+		}
+	}
+
+	MeasuredClipSpeeds.Add(Clip, Speed);
+	return Speed;
 }
 
 const UEOInputConfig* AEOOperativeCharacter::GetInputConfig() const

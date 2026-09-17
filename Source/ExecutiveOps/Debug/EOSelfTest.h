@@ -68,6 +68,8 @@ private:
 		StowInterrupt,
 		SlideCheck,
 		SlideConfirm,
+		MeshDriftRun,
+		MeshDriftCheck,
 
 		// M5: the same encounter, five different outcomes.
 		GuardReset,

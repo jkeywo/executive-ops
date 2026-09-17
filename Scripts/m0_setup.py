@@ -28,7 +28,10 @@ OWA = "/Game/OpenWorldAnimset/Animations"
 # than in C++ so the code carries no asset paths.
 ANIMS = {
     "IdleAnim":   OWA + "/Idles/Idle",
-    "WalkAnim":   OWA + "/FMotion/Walk/FMotion_Walk_Fast_Loop",
+    # Not Walk_Fast_Loop, despite the name: that clip is a 15-second turn,
+    # covering 65cm while rotating 180 degrees. Root-locked it reads as the
+    # operative slowly pivoting on the spot every time they set off.
+    "WalkAnim":   OWA + "/FMotion/Walk/FMotion_Walk_Loop",
     "JogAnim":    OWA + "/FMotion/Jog/FMotion_Jog_Fast_Loop",
     "SprintAnim": OWA + "/FMotion/Sprint/FMotion_Sprint_Loop",
     "FallAnim":   OWA + "/Jump/Jog_Jump_Start",
@@ -37,7 +40,7 @@ ANIMS = {
 
 GUARD_ANIMS = {
     "IdleAnim":      OWA + "/Idles/Idle",
-    "WalkAnim":      OWA + "/FMotion/Walk/FMotion_Walk_Fast_Loop",
+    "WalkAnim":      OWA + "/FMotion/Walk/FMotion_Walk_Loop",
     "AimAnim":       OWA + "/Pistol/Pistol_aim_Idle",
     "FireAnim":      OWA + "/Pistol/Pistol_shoot_01",
     "HitReactAnim":  OWA + "/FMotion/Injured/FMotion_Injured_Idle",
@@ -134,11 +137,34 @@ def create_blueprints():
             if mat:
                 thruster.set_material(0, mat)
 
+    def root_lock(anim):
+        """Pin the clip's root bone so the mesh cannot walk away from its capsule.
+
+        These characters use single-node playback, which evaluates the root bone
+        like any other but does not consume it as root motion. The jog loop
+        carries 22 metres of travel in its root track, so unlocked it slides the
+        rendered model that far past the capsule the game is actually moving.
+        Locking to the clip's own first frame keeps the feet animating and the
+        body where the capsule is.
+        """
+        changed = False
+        for prop, value in (
+            ("enable_root_motion", False),
+            ("root_motion_root_lock", unreal.RootMotionRootLock.ANIM_FIRST_FRAME),
+            ("force_root_lock", True),
+        ):
+            if anim.get_editor_property(prop) != value:
+                anim.set_editor_property(prop, value)
+                changed = True
+        return changed
+
     def assign_anims(target, mapping):
         for prop, path in mapping.items():
             anim = unreal.load_asset(path)
             if not anim:
                 raise RuntimeError("animation not found: " + path)
+            if root_lock(anim):
+                EAL.save_asset(path, only_if_is_dirty=False)
             target.set_editor_property(prop, anim)
 
     def cfg_operative(cdo):
