@@ -3,6 +3,55 @@
 #include "ExecutiveOps.h"
 #include "EngineUtils.h"
 #include "Interfaces/EOMissionParticipantInterface.h"
+#include "Mission/EOMissionSite.h"
+
+bool UEOMissionSubsystem::SelectSite(AEOMissionSite* Site)
+{
+	if (!Site)
+	{
+		return false;
+	}
+
+	// Changing target mid-mission would leave the ground phase pointing at the
+	// wrong place, so selection is only allowed before committing.
+	if (MissionState != EEOMissionState::Inactive && MissionState != EEOMissionState::InFlight)
+	{
+		UE_LOG(LogExecutiveOps, Warning,
+			TEXT("Site selection rejected: mission already underway (%s)."), *GetMissionStateName());
+		return false;
+	}
+
+	SelectedSite = Site;
+	UE_LOG(LogExecutiveOps, Log, TEXT("Mission site selected: %s"), *Site->GetDisplayName().ToString());
+	return true;
+}
+
+AEOMissionSite* UEOMissionSubsystem::SelectDefaultSite()
+{
+	if (SelectedSite)
+	{
+		return SelectedSite;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AEOMissionSite> It(World); It; ++It)
+	{
+		// Stop at the first site that is actually accepted. Breaking regardless
+		// would report "no site in this level" for what is really a refused
+		// selection, which is a misleading diagnosis.
+		if (SelectSite(*It))
+		{
+			break;
+		}
+	}
+
+	return SelectedSite;
+}
 
 bool UEOMissionSubsystem::StartMission()
 {
@@ -49,6 +98,8 @@ bool UEOMissionSubsystem::FailMission()
 
 void UEOMissionSubsystem::ResetMission()
 {
+	// The selected site survives a reset: the player is being put back at the
+	// start of the same mission, not sent back to an empty city.
 	SetMissionState(EEOMissionState::Inactive);
 }
 

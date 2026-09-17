@@ -165,57 +165,6 @@ def add_lighting():
         unreal.ExponentialHeightFog, unreal.Vector(0, 0, 0)).set_actor_label("HeightFog")
 
 
-def build_flight_map():
-    """
-    M1's flight playground, roughed in: towers, canyons, pillars, a gap to fly
-    through, and one obvious mission building. Deliberately crude - M1 owns the
-    real layout, this exists so M0 has somewhere to fly.
-    """
-    fresh_level(MAPS + "/L_FlightTest")
-    add_lighting()
-
-    mat = unreal.load_asset(BASIC_MAT)
-
-    # Ground plane.
-    spawn_block(unreal.Vector(0, 0, -50), unreal.Vector(400, 400, 1), "Ground", mat)
-
-    # A grid of towers of varying height, forming street canyons between them.
-    spacing = 4000
-    heights = [30, 55, 20, 70, 40, 85, 25, 60, 45]
-    i = 0
-    for gx in range(-1, 2):
-        for gy in range(-1, 2):
-            if gx == 0 and gy == 0:
-                i += 1
-                continue  # centre is reserved for the mission building
-            h = heights[i % len(heights)]
-            spawn_block(
-                unreal.Vector(gx * spacing, gy * spacing, h * 50),
-                unreal.Vector(12, 12, h),
-                "Tower_{}_{}".format(gx, gy), mat)
-            i += 1
-
-    # The obvious mission building: wider, lower, with a flat roof to hover over.
-    spawn_block(unreal.Vector(0, 0, 900), unreal.Vector(20, 20, 18), "MissionBuilding", mat)
-
-    # Elevated infrastructure to fly under, and pillars holding it up.
-    spawn_block(unreal.Vector(0, 9000, 1800), unreal.Vector(90, 6, 1), "Skyway", mat)
-    for x in range(-3, 4):
-        spawn_block(unreal.Vector(x * 2500, 9000, 875),
-                    unreal.Vector(2, 2, 17), "SkywayPillar_{}".format(x), mat)
-
-    # A tight gap: two blocks with a deliberately narrow slot between them.
-    spawn_block(unreal.Vector(-9000, 0, 1500), unreal.Vector(6, 20, 30), "GapWall_L", mat)
-    spawn_block(unreal.Vector(-9000, 3000, 1500), unreal.Vector(6, 20, 30), "GapWall_R", mat)
-
-    start = EAS.spawn_actor_from_class(
-        unreal.PlayerStart, unreal.Vector(0, -9000, 1200), unreal.Rotator(0, 90, 0))
-    start.set_actor_label("PlayerStart")
-
-    save_level(MAPS + "/L_FlightTest")
-    log("built L_FlightTest: {} actors".format(len(EAS.get_all_level_actors())))
-
-
 def fresh_level(path):
     """
     Start from an empty level at path.
@@ -237,6 +186,88 @@ def fresh_level(path):
 def save_level(path):
     if not ELAS.save_current_level():
         raise RuntimeError("could not save level " + path)
+
+
+def build_flight_map():
+    """
+    M2's city district: a small block of towers with street canyons between them,
+    rooftop levels, elevated infrastructure to fly under, and one obvious mission
+    building. Minutes of environment, not kilometres.
+
+    Deliberately crude geometry. Its job is to answer questions about aircraft
+    scale, useful speed, building spacing and camera readability - not to look
+    like a city.
+    """
+    fresh_level(MAPS + "/L_FlightTest")
+    add_lighting()
+
+    mat = unreal.load_asset(BASIC_MAT)
+
+    # Ground. 1km square: enough that the district has edges the player can see.
+    spawn_block(unreal.Vector(0, 0, -50), unreal.Vector(500, 500, 1), "Ground", mat)
+
+    # --- Tower blocks ------------------------------------------------------
+    # A 4x4 grid on a 5000cm pitch. Gaps between towers form the street canyons;
+    # varied heights give rooftop levels at different altitudes to work from.
+    pitch = 5000
+    heights = [34, 58, 22, 71, 45, 88, 27, 63, 40, 52, 76, 31, 68, 25, 55, 82]
+    mission_cell = (1, 1)
+
+    index = 0
+    for gx in range(-2, 2):
+        for gy in range(-2, 2):
+            index += 1
+            if (gx, gy) == mission_cell:
+                continue
+
+            h = heights[index % len(heights)]
+            x, y = gx * pitch + pitch // 2, gy * pitch + pitch // 2
+            spawn_block(unreal.Vector(x, y, h * 50), unreal.Vector(16, 16, h),
+                        "Tower_{}_{}".format(gx, gy), mat)
+
+            # Rooftop structures: something to hover beside and read height against.
+            if h > 50:
+                spawn_block(unreal.Vector(x + 400, y + 400, h * 100 + 300),
+                            unreal.Vector(4, 4, 6), "Roof_{}_{}".format(gx, gy), mat)
+
+    # --- The mission building ----------------------------------------------
+    # Lower and wider than its neighbours, with a clear flat roof, so it reads as
+    # the objective from the air without needing a label.
+    mx, my = mission_cell[0] * pitch + pitch // 2, mission_cell[1] * pitch + pitch // 2
+    spawn_block(unreal.Vector(mx, my, 1400), unreal.Vector(26, 26, 28),
+                "MissionBuilding", mat)
+
+    # --- Elevated infrastructure -------------------------------------------
+    # A skyway across the district at mid altitude: an obstacle at speed and an
+    # obvious "fly under or over" decision.
+    spawn_block(unreal.Vector(-2500, 0, 4200), unreal.Vector(6, 200, 1), "Skyway", mat)
+    for i in range(-4, 5):
+        spawn_block(unreal.Vector(-2500, i * 2500, 2100),
+                    unreal.Vector(2, 2, 42), "SkywayPillar_{}".format(i), mat)
+
+    # --- Tighter optional route --------------------------------------------
+    # A narrow slot between two slabs, off the obvious approach line. Wide enough
+    # for the craft, tight enough to be a choice rather than a default.
+    spawn_block(unreal.Vector(7000, -3000, 3000), unreal.Vector(30, 4, 60), "SlotWall_A", mat)
+    spawn_block(unreal.Vector(7000, -1400, 3000), unreal.Vector(30, 4, 60), "SlotWall_B", mat)
+
+    # --- Mission site -------------------------------------------------------
+    # Hover volume sits above the mission building's roof; the operative inserts
+    # onto the roof itself.
+    site = EAS.spawn_actor_from_class(
+        unreal.EOMissionSite, unreal.Vector(mx, my, 4200))
+    site.set_actor_label("MissionSite")
+    marker = site.get_editor_property("Marker")
+    marker.set_editor_property("static_mesh", unreal.load_asset(CUBE))
+    if mat:
+        marker.set_material(0, mat)
+
+    start = EAS.spawn_actor_from_class(
+        unreal.PlayerStart, unreal.Vector(-11000, -11000, 2500), unreal.Rotator(0, 45, 0))
+    start.set_actor_label("PlayerStart")
+
+    save_level(MAPS + "/L_FlightTest")
+    log("built L_FlightTest: {} actors".format(len(EAS.get_all_level_actors())))
 
 
 def build_mission_map():
@@ -273,7 +304,7 @@ def place_pawns_in_flight_map(aircraft_bp):
     else:
         craft = EAS.spawn_actor_from_class(
             aircraft_bp.generated_class(),
-            unreal.Vector(0, -9000, 1200), unreal.Rotator(0, 90, 0))
+            unreal.Vector(-11000, -11000, 2500), unreal.Rotator(0, 45, 0))
         craft.set_actor_label("BP_Aircraft")
         log("placed aircraft in L_FlightTest")
 
@@ -310,7 +341,7 @@ def verify():
         check(EAL.does_asset_exist(path), "asset exists: " + path)
 
     # Existence is not enough - load each map and confirm it actually has content.
-    for path, min_actors in [(MAPS + "/L_MissionTest", 6), (MAPS + "/L_FlightTest", 20)]:
+    for path, min_actors in [(MAPS + "/L_MissionTest", 6), (MAPS + "/L_FlightTest", 40)]:
         if not ELAS.load_level(path):
             check(False, "could not load " + path)
             continue
@@ -324,9 +355,19 @@ def verify():
 
     # The flight map must contain a real aircraft, not rely on the spawn fallback.
     if ELAS.load_level(MAPS + "/L_FlightTest"):
-        craft = [a for a in EAS.get_all_level_actors()
-                 if isinstance(a, unreal.EOAircraftPawn)]
+        actors = EAS.get_all_level_actors()
+
+        craft = [a for a in actors if isinstance(a, unreal.EOAircraftPawn)]
         check(len(craft) == 1, "L_FlightTest has exactly 1 aircraft (found {})".format(len(craft)))
+
+        sites = [a for a in actors if isinstance(a, unreal.EOMissionSite)]
+        check(len(sites) == 1, "L_FlightTest has exactly 1 mission site (found {})".format(len(sites)))
+
+        if craft and sites:
+            # The approach has to be a flight, not a hop.
+            dist = craft[0].get_actor_location().distance(sites[0].get_actor_location())
+            check(dist > 15000,
+                  "start is a real distance from the site ({:.0f}cm)".format(dist))
 
     op = unreal.load_asset(BP + "/BP_Operative")
     if op:

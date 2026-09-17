@@ -38,6 +38,14 @@ public:
 	UFUNCTION(Exec)
 	void EOToggleDebugHUD();
 
+	/** Show/hide the tactical map. */
+	UFUNCTION(Exec)
+	void EOToggleMap();
+
+	/** Select the only mission site in the level and begin the approach. */
+	UFUNCTION(Exec)
+	void EOSelectMission();
+
 	/** Print the current mission state to the log. */
 	UFUNCTION(Exec)
 	void EOMissionState();

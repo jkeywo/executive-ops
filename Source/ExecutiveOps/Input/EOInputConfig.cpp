@@ -48,6 +48,7 @@ void UEOInputConfig::BuildRuntimeInput()
 	FlightYawAction      = MakeAction(this, TEXT("IA_FlightYaw"),      EInputActionValueType::Axis1D);
 	HoverAction          = MakeAction(this, TEXT("IA_Hover"),          EInputActionValueType::Boolean);
 	DeployAction         = MakeAction(this, TEXT("IA_Deploy"),         EInputActionValueType::Boolean);
+	ToggleMapAction      = MakeAction(this, TEXT("IA_ToggleMap"),      EInputActionValueType::Boolean);
 
 	MoveAction           = MakeAction(this, TEXT("IA_Move"),           EInputActionValueType::Axis2D);
 	JumpAction           = MakeAction(this, TEXT("IA_Jump"),           EInputActionValueType::Boolean);
@@ -80,6 +81,7 @@ void UEOInputConfig::BuildDefaultMappings()
 
 	AircraftContext->MapKey(HoverAction, EKeys::LeftShift);
 	AircraftContext->MapKey(DeployAction, EKeys::F);
+	AircraftContext->MapKey(ToggleMapAction, EKeys::M);
 
 	AircraftContext->MapKey(LookAction, EKeys::Mouse2D).Modifiers.Add(MakeNegate(this, false, true, false));
 

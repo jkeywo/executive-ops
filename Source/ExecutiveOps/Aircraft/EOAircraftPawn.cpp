@@ -9,6 +9,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Core/EOPlayerController.h"
 #include "Input/EOInputConfig.h"
+#include "UI/EONavigationHUD.h"
 
 AEOAircraftPawn::AEOAircraftPawn()
 {
@@ -297,6 +298,7 @@ void AEOAircraftPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	Input->BindAction(Config->HoverAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_HoverStart);
 	Input->BindAction(Config->HoverAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_HoverStop);
 	Input->BindAction(Config->DeployAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_Deploy);
+	Input->BindAction(Config->ToggleMapAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_ToggleMap);
 }
 
 void AEOAircraftPawn::Input_Move(const FInputActionValue& Value)
@@ -355,6 +357,17 @@ void AEOAircraftPawn::Input_HoverStart(const FInputActionValue& Value)
 void AEOAircraftPawn::Input_HoverStop(const FInputActionValue& Value)
 {
 	Execute_SetHoverEnabled(this, false);
+}
+
+void AEOAircraftPawn::Input_ToggleMap(const FInputActionValue& Value)
+{
+	if (const AEOPlayerController* EOController = Cast<AEOPlayerController>(GetController()))
+	{
+		if (AEONavigationHUD* HUD = Cast<AEONavigationHUD>(EOController->GetHUD()))
+		{
+			HUD->ToggleMap();
+		}
+	}
 }
 
 void AEOAircraftPawn::Input_Deploy(const FInputActionValue& Value)

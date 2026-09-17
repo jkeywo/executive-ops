@@ -19,7 +19,7 @@ AEODebugHUD::AEODebugHUD()
 	PrimaryActorTick.bCanEverTick = false;
 }
 
-void AEODebugHUD::DrawLine(const FString& Text, float& Y, const FLinearColor& Color)
+void AEODebugHUD::DrawTextLine(const FString& Text, float& Y, const FLinearColor& Color)
 {
 	DrawText(Text, Color, DebugLeftMargin, Y, GEngine->GetSmallFont(), 1.2f);
 	Y += DebugLineHeight;
@@ -42,15 +42,15 @@ void AEODebugHUD::DrawHUD()
 
 	float Y = DebugTopMargin;
 
-	DrawLine(TEXT("EXECUTIVE OPS"), Y, FLinearColor(0.2f, 0.9f, 1.f));
+	DrawTextLine(TEXT("EXECUTIVE OPS"), Y, FLinearColor(0.2f, 0.9f, 1.f));
 
 	const FString ModeName =
 		StaticEnum<EEOControlMode>()->GetNameStringByValue(static_cast<int64>(EOController->GetControlMode()));
-	DrawLine(FString::Printf(TEXT("Control:  %s"), *ModeName), Y);
+	DrawTextLine(FString::Printf(TEXT("Control:  %s"), *ModeName), Y);
 
 	if (const UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())
 	{
-		DrawLine(FString::Printf(TEXT("Mission:  %s"), *Mission->GetMissionStateName()), Y);
+		DrawTextLine(FString::Printf(TEXT("Mission:  %s"), *Mission->GetMissionStateName()), Y);
 	}
 
 	APawn* Pawn = EOController->GetPawn();
@@ -61,29 +61,29 @@ void AEODebugHUD::DrawHUD()
 		const bool bReady = IEOAircraftControlInterface::Execute_IsReadyForDeployment(Pawn);
 
 		// cm/s -> km/h, the number that actually means something while flying.
-		DrawLine(FString::Printf(TEXT("Speed:    %.0f km/h"), Speed * 0.036f), Y);
+		DrawTextLine(FString::Printf(TEXT("Speed:    %.0f km/h"), Speed * 0.036f), Y);
 
 		if (const AEOAircraftPawn* Craft = Cast<AEOAircraftPawn>(Pawn))
 		{
 			// A bar, because the hover transition is a blend and a boolean hides that.
 			const int32 Filled = FMath::RoundToInt(Craft->GetHoverBlend() * 10.f);
 			const FString Bar = FString::ChrN(Filled, TEXT('=')) + FString::ChrN(10 - Filled, TEXT('.'));
-			DrawLine(FString::Printf(TEXT("Hover:    [%s] %s"), *Bar, bHover ? TEXT("HELD") : TEXT("")), Y);
-			DrawLine(FString::Printf(TEXT("Thrust:   %.0f%%"), Craft->GetThrustAlpha() * 100.f), Y);
+			DrawTextLine(FString::Printf(TEXT("Hover:    [%s] %s"), *Bar, bHover ? TEXT("HELD") : TEXT("")), Y);
+			DrawTextLine(FString::Printf(TEXT("Thrust:   %.0f%%"), Craft->GetThrustAlpha() * 100.f), Y);
 		}
 		else
 		{
-			DrawLine(FString::Printf(TEXT("Hover:    %s"), bHover ? TEXT("ON") : TEXT("off")), Y);
+			DrawTextLine(FString::Printf(TEXT("Hover:    %s"), bHover ? TEXT("ON") : TEXT("off")), Y);
 		}
-		DrawLine(FString::Printf(TEXT("Deploy:   %s"), bReady ? TEXT("READY [F]") : TEXT("hold Shift to hover")), Y,
+		DrawTextLine(FString::Printf(TEXT("Deploy:   %s"), bReady ? TEXT("READY [F]") : TEXT("hold Shift to hover")), Y,
 			bReady ? FLinearColor::Green : FLinearColor(0.6f, 0.6f, 0.6f));
 	}
 	else if (Pawn)
 	{
-		DrawLine(FString::Printf(TEXT("Speed:    %.0f cm/s"), Pawn->GetVelocity().Size()), Y);
+		DrawTextLine(FString::Printf(TEXT("Speed:    %.0f cm/s"), Pawn->GetVelocity().Size()), Y);
 	}
 
 	Y += DebugLineHeight;
-	DrawLine(TEXT("EOReset | EOPossessAircraft | EOPossessOperative | EODeploy | EOExtract"), Y,
+	DrawTextLine(TEXT("EOReset | EOPossessAircraft | EOPossessOperative | EODeploy | EOExtract"), Y,
 		FLinearColor(0.6f, 0.6f, 0.6f));
 }

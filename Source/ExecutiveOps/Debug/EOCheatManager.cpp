@@ -5,6 +5,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Mission/EOMissionSubsystem.h"
 #include "UI/EODebugHUD.h"
+#include "UI/EONavigationHUD.h"
+#include "Mission/EOMissionSite.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 
 void UEOCheatManager::EOReset()
@@ -82,6 +84,36 @@ void UEOCheatManager::EOToggleDebugHUD()
 			HUD->ToggleVisible();
 		}
 	}
+}
+
+void UEOCheatManager::EOToggleMap()
+{
+	if (const APlayerController* PC = GetOuterAPlayerController())
+	{
+		if (AEONavigationHUD* HUD = Cast<AEONavigationHUD>(PC->GetHUD()))
+		{
+			HUD->ToggleMap();
+		}
+	}
+}
+
+void UEOCheatManager::EOSelectMission()
+{
+	UWorld* World = GetWorld();
+	UEOMissionSubsystem* Mission = World ? World->GetSubsystem<UEOMissionSubsystem>() : nullptr;
+	if (!Mission)
+	{
+		return;
+	}
+
+	const AEOMissionSite* Site = Mission->SelectDefaultSite();
+	if (!Site)
+	{
+		UE_LOG(LogExecutiveOps, Warning, TEXT("EOSelectMission: no mission site in this level."));
+		return;
+	}
+
+	Mission->StartMission();
 }
 
 void UEOCheatManager::EOMissionState()

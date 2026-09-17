@@ -28,6 +28,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Debug")
 	bool bDebugVisible = true;
 
-private:
-	void DrawLine(const FString& Text, float& Y, const FLinearColor& Color = FLinearColor::White);
+protected:
+	/** One line of the readout, advancing Y. Named to avoid shadowing AHUD::DrawLine. */
+	void DrawTextLine(const FString& Text, float& Y, const FLinearColor& Color = FLinearColor::White);
 };

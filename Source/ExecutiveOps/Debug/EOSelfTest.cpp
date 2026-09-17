@@ -5,6 +5,7 @@
 #include "ExecutiveOps.h"
 #include "GameFramework/Character.h"
 #include "Interfaces/EOAircraftControlInterface.h"
+#include "Mission/EOMissionSite.h"
 #include "Mission/EOMissionSubsystem.h"
 #include "TimerManager.h"
 
@@ -76,6 +77,12 @@ void UEOSelfTest::Step()
 	{
 		Finish();
 		return;
+	}
+
+	// Some phases need to act continuously while their dwell runs down.
+	if (Phase == EPhase::NavigateToSite)
+	{
+		SteerTowardSite();
 	}
 
 	// Let a phase settle for its dwell before its checks are sampled.
@@ -253,6 +260,71 @@ void UEOSelfTest::Step()
 			Check(FMath::IsNearlyZero(IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane)),
 				TEXT("reset clears velocity"));
 		}
+		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M2: navigation --"));
+		Advance(EPhase::MissionSelect, 0.f);
+		break;
+	}
+
+	// ---- M2: select a site and fly the approach -------------------------------
+	case EPhase::MissionSelect:
+	{
+		AEOMissionSite* Site = Mission ? Mission->SelectDefaultSite() : nullptr;
+		Check(Site != nullptr, TEXT("a mission site exists and can be selected"));
+		Check(Mission && Mission->GetSelectedSite() == Site, TEXT("selected site is recorded"));
+
+		if (Site && Craft)
+		{
+			Check(!Site->IsWithinHoverVolume(Craft),
+				TEXT("aircraft does not start inside the hover volume"));
+			Check(Site->GetHoverRadius() > 0.f, TEXT("hover volume has a radius"));
+
+			DistanceSample = FVector::Dist(Craft->GetActorLocation(), Site->GetHoverPoint());
+			Check(DistanceSample > 15000.f,
+				FString::Printf(TEXT("site is a real flight away (%.0fm)"), DistanceSample * 0.01f));
+		}
+
+		Check(Mission && Mission->StartMission(), TEXT("mission starts"));
+		Check(Mission && Mission->GetMissionState() == EEOMissionState::InFlight,
+			TEXT("starting the mission puts it In Flight"));
+
+		// Retargeting mid-approach would leave the ground phase pointing elsewhere.
+		Advance(EPhase::NavigateToSite, 32.f);
+		break;
+	}
+
+	case EPhase::NavigateToSite:
+	{
+		AEOMissionSite* Site = Mission ? Mission->GetSelectedSite() : nullptr;
+		if (Site && Craft)
+		{
+			const float Remaining = FVector::Dist(Craft->GetActorLocation(), Site->GetHoverPoint());
+			Check(Remaining < DistanceSample,
+				FString::Printf(TEXT("flying the approach closes the distance (%.0fm -> %.0fm)"),
+					DistanceSample * 0.01f, Remaining * 0.01f));
+			Check(Site->IsWithinHoverVolume(Craft),
+				FString::Printf(TEXT("reaches the deployment zone (%.0fm from hover point)"),
+					Remaining * 0.01f));
+		}
+		Advance(EPhase::ArrivedAtSite, 1.5f);
+		break;
+	}
+
+	case EPhase::ArrivedAtSite:
+	{
+		AEOMissionSite* Site = Mission ? Mission->GetSelectedSite() : nullptr;
+		if (Site && Craft)
+		{
+			Check(IEOAircraftControlInterface::Execute_IsReadyForDeployment(Craft),
+				TEXT("settles into a deployable hover over the site"));
+		}
+		// Changing target is fine right up until the player commits to the drop.
+		Check(Mission && Mission->SelectSite(Site),
+			TEXT("can still retarget while inbound"));
+
+		Check(Controller->RequestDeployment(), TEXT("can deploy from the hover volume"));
+		Check(Mission && !Mission->SelectSite(Site),
+			TEXT("cannot retarget once deployed"));
+
 		Advance(EPhase::Done, 0.f);
 		break;
 	}
@@ -262,6 +334,70 @@ void UEOSelfTest::Step()
 		Finish();
 		break;
 	}
+}
+
+void UEOSelfTest::SteerTowardSite()
+{
+	AEOMissionSite* Site = Controller
+		? Controller->GetWorld()->GetSubsystem<UEOMissionSubsystem>()->GetSelectedSite()
+		: nullptr;
+	APawn* Craft = GetAircraftPawn();
+	if (!Site || !Craft)
+	{
+		return;
+	}
+
+	// Cruise above the tallest tower in the district, then descend on finals.
+	// A straight line from the start to the site passes through the tower grid,
+	// so a naive direct approach just scrapes down the side of a building.
+	constexpr float CruiseAltitude = 12000.f;
+	constexpr float OverheadRange = 3000.f;
+	constexpr float SlowRange = 6000.f;
+	constexpr float StopRange = 400.f;
+
+	const FVector Location = Craft->GetActorLocation();
+	const FVector Target = Site->GetHoverPoint();
+
+	const FVector Offset = Target - Location;
+	const float HorizontalDistance = FVector(Offset.X, Offset.Y, 0.f).Size();
+
+	// Point the nose at the site. The craft yaws itself in play; here the test
+	// stands in for the pilot.
+	if (HorizontalDistance > StopRange)
+	{
+		Craft->SetActorRotation(FRotator(0.f, Offset.Rotation().Yaw, 0.f));
+	}
+
+	// Stay above the towers until almost overhead, then descend more or less
+	// vertically. Descending on the way in flies the craft into the side of the
+	// neighbouring block.
+	const bool bOverhead = HorizontalDistance < OverheadRange;
+	const float DesiredZ = bOverhead ? Target.Z : FMath::Max(Target.Z, CruiseAltitude);
+
+	IEOAircraftControlInterface::Execute_SetHoverEnabled(Craft, HorizontalDistance < SlowRange);
+
+	if (Offset.Size() < StopRange)
+	{
+		IEOAircraftControlInterface::Execute_SetFlightInput(Craft, FVector::ZeroVector);
+		return;
+	}
+
+	const float AltitudeError = DesiredZ - Location.Z;
+	const float Climb = FMath::Clamp(AltitudeError / 800.f, -1.f, 1.f);
+
+	// Do not cross the district until the climb is done, and ease off forward
+	// once overhead so the descent is not also a fly-past.
+	float Forward = 1.f;
+	if (!bOverhead && AltitudeError > 2000.f)
+	{
+		Forward = 0.f;
+	}
+	else if (bOverhead)
+	{
+		Forward = FMath::Clamp(HorizontalDistance / OverheadRange, 0.f, 1.f);
+	}
+
+	IEOAircraftControlInterface::Execute_SetFlightInput(Craft, FVector(Forward, 0.f, Climb));
 }
 
 void UEOSelfTest::Finish()

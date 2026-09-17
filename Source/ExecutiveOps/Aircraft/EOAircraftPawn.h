@@ -77,6 +77,7 @@ protected:
 	void Input_HoverStart(const FInputActionValue& Value);
 	void Input_HoverStop(const FInputActionValue& Value);
 	void Input_Deploy(const FInputActionValue& Value);
+	void Input_ToggleMap(const FInputActionValue& Value);
 
 	/** Integrate velocity from the current input, then sweep the actor through the world. */
 	void UpdateFlight(float DeltaSeconds);

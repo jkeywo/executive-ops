@@ -56,6 +56,9 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Input|Aircraft")
 	TObjectPtr<UInputAction> DeployAction;
 
+	UPROPERTY(VisibleAnywhere, Category = "Input|Aircraft")
+	TObjectPtr<UInputAction> ToggleMapAction;
+
 	// Operative (M4 owns parkour; M0 needs move/look/jump/sprint present)
 	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
 	TObjectPtr<UInputAction> MoveAction;

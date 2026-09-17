@@ -46,11 +46,21 @@ private:
 		FlightCoast,
 		HoverEngage,
 		HoverSpeedClamp,
+		MissionSelect,
+		NavigateToSite,
+		ArrivedAtSite,
 		Done
 	};
 
 	void Step();
 	void Advance(EPhase Next, float DwellSeconds);
+
+	/**
+	 * Flies the craft at the selected site: yaw to face it, throttle forward, and
+	 * drop into hover on short finals so it settles instead of overshooting.
+	 * Runs every step during the approach rather than only at the dwell.
+	 */
+	void SteerTowardSite();
 
 	void Check(bool bCondition, const FString& Description);
 	void Finish();
@@ -72,6 +82,7 @@ private:
 
 	/** Values carried between phases for comparison. */
 	float SpeedSample = 0.f;
+	float DistanceSample = 0.f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<APawn> BootPawn;

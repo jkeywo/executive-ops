@@ -5,6 +5,8 @@
 #include "Interfaces/EOMissionTypes.h"
 #include "EOMissionSubsystem.generated.h"
 
+class AEOMissionSite;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FEOMissionStateChanged, EEOMissionState, OldState, EEOMissionState, NewState);
 
 /**
@@ -25,6 +27,21 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Mission")
 	EEOMissionState GetMissionState() const { return MissionState; }
+
+	/**
+	 * The site the player has selected to fly to. Selecting is separate from
+	 * starting: the player picks a target from the map, then the mission begins
+	 * when they commit to the approach.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Mission")
+	bool SelectSite(AEOMissionSite* Site);
+
+	/** Selects the only site in the level, if there is exactly one. Returns it. */
+	UFUNCTION(BlueprintCallable, Category = "Mission")
+	AEOMissionSite* SelectDefaultSite();
+
+	UFUNCTION(BlueprintPure, Category = "Mission")
+	AEOMissionSite* GetSelectedSite() const { return SelectedSite; }
 
 	/** Inactive -> InFlight. */
 	UFUNCTION(BlueprintCallable, Category = "Mission")
@@ -68,4 +85,7 @@ private:
 
 	UPROPERTY(Transient)
 	EEOMissionState MissionState = EEOMissionState::Inactive;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AEOMissionSite> SelectedSite;
 };
