@@ -200,9 +200,9 @@ module.
 
 ## What was not implemented
 
-Four candidates are wholly or largely untouched. Each has a settled direction
-recorded in `Docs/adr/`, so the decision work is not lost - only the execution
-remains.
+Three candidates remain, all of them asset-authoring jobs. Each has a settled
+direction recorded in `Docs/adr/`, so the decision work is not lost - only the
+execution, and all three want the editor open rather than a headless agent.
 
 **C3 - one HUD state, two adapters, on UMG.** The largest single job here: 1,184
 lines of Canvas drawing across three `AHUD` classes, plus widget assets, plus
