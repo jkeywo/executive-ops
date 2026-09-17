@@ -29,6 +29,26 @@ public:
 	 */
 	virtual void PostRender() override;
 
+	/**
+	 * The panel currently showing this HUD, if any.
+	 *
+	 * When set, the whole draw chain is redirected onto it instead of the
+	 * viewport, so the readouts live in the world rather than pasted over it.
+	 * The screen-space flash still draws over the top - it is hiding a cut, and
+	 * a cut is not something a diegetic panel can cover.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "HUD")
+	void SetProjectionScreen(class UEOHudScreenComponent* Screen);
+
+	/**
+	 * Runs the whole draw chain into the given canvas instead of the viewport.
+	 *
+	 * Every readout draws through AHUD::Canvas, so pointing that at a render
+	 * target's canvas redirects all of them without any of them knowing. The
+	 * member is protected, which is why this lives here rather than on the screen.
+	 */
+	void DrawInto(class UCanvas* TargetCanvas);
+
 	/** Toggled by the EOToggleDebugHUD console command. */
 	UFUNCTION(BlueprintCallable, Category = "Debug")
 	void ToggleVisible() { bDebugVisible = !bDebugVisible; }
@@ -36,6 +56,9 @@ public:
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Debug")
 	bool bDebugVisible = true;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UEOHudScreenComponent> ProjectionScreen;
 
 protected:
 	/** One line of the readout, advancing Y. Named to avoid shadowing AHUD::DrawLine. */

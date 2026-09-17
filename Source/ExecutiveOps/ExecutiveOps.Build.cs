@@ -14,7 +14,8 @@ public class ExecutiveOps : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"Niagara",
-			"DeveloperSettings"
+			"DeveloperSettings",
+			"ProceduralMeshComponent"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

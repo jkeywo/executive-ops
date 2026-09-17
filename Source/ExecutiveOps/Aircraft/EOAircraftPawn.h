@@ -167,6 +167,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<UCameraComponent> CockpitCamera;
 
+	/**
+	 * The HUD, on glass in front of the pilot.
+	 *
+	 * Attached to CockpitPivot rather than the camera, so the readouts belong to
+	 * the airframe: looking around pans across a fixed display instead of
+	 * dragging it along with your head.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<class UEOHudScreenComponent> HudScreen;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")
 	TObjectPtr<UAudioComponent> EngineAudio;
 

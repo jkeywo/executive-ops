@@ -93,6 +93,53 @@ def make_blueprint(path, parent_class):
     return asset
 
 
+HUD_MATERIAL = "/Game/Materials/M_EOHudScreen"
+
+
+def build_hud_material():
+    """An unlit, translucent surface that just shows the HUD render target.
+
+    Unlit because a readout is a light source, not a lit object: with shading it
+    would dim whenever the cockpit was in shadow. Translucent because the render
+    target clears to transparent, so only what the HUD actually drew appears on
+    the glass.
+    """
+    if EAL.does_asset_exist(HUD_MATERIAL):
+        return unreal.load_asset(HUD_MATERIAL)
+
+    mat = AT.create_asset("M_EOHudScreen", "/Game/Materials",
+                          unreal.Material, unreal.MaterialFactoryNew())
+
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    # The panel hangs in front of the pilot's face, and a single-sided quad would
+    # vanish the moment the curve turned away from the camera.
+    mat.set_editor_property("two_sided", True)
+
+    MEL = unreal.MaterialEditingLibrary
+
+    tex = MEL.create_material_expression(
+        mat, unreal.MaterialExpressionTextureSampleParameter2D, -400, 0)
+    tex.set_editor_property("parameter_name", "HudTexture")
+
+    brightness = MEL.create_material_expression(
+        mat, unreal.MaterialExpressionScalarParameter, -400, 250)
+    brightness.set_editor_property("parameter_name", "Brightness")
+    brightness.set_editor_property("default_value", 1.6)
+
+    boost = MEL.create_material_expression(mat, unreal.MaterialExpressionMultiply, -150, 0)
+    MEL.connect_material_expressions(tex, "RGB", boost, "A")
+    MEL.connect_material_expressions(brightness, "", boost, "B")
+
+    MEL.connect_material_property(boost, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(tex, "A", unreal.MaterialProperty.MP_OPACITY)
+
+    MEL.recompile_material(mat)
+    EAL.save_loaded_asset(mat)
+    log("created " + HUD_MATERIAL)
+    return mat
+
+
 def create_blueprints():
     unreal.EditorAssetLibrary.make_directory(BP)
 
@@ -108,6 +155,8 @@ def create_blueprints():
 
     sub = unreal.get_engine_subsystem(unreal.SubobjectDataSubsystem)
 
+    hud_material = build_hud_material()
+
     def set_defaults(bp_asset, setter):
         """Edit a Blueprint's CDO, then recompile and save."""
         cdo = unreal.get_default_object(bp_asset.generated_class())
@@ -116,6 +165,12 @@ def create_blueprints():
         EAL.save_loaded_asset(bp_asset)
 
     def cfg_aircraft(cdo):
+        # Ahead of the greybox check below: the HUD panel belongs to the cockpit
+        # whether or not the real hull has been imported yet.
+        screen = cdo.get_editor_property("HudScreen")
+        if screen and hud_material:
+            screen.set_editor_property("screen_material", hud_material)
+
         # Leave a real imported hull alone. Scripts/import_playership.py owns the
         # aircraft's appearance once it has run; this is only the greybox
         # fallback for a project that has not imported the model yet.

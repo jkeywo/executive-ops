@@ -11,6 +11,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Core/EOPlayerController.h"
 #include "Input/EOInputConfig.h"
+#include "UI/EODebugHUD.h"
+#include "UI/EOHudScreenComponent.h"
 #include "UI/EONavigationHUD.h"
 
 AEOAircraftPawn::AEOAircraftPawn()
@@ -88,6 +90,10 @@ AEOAircraftPawn::AEOAircraftPawn()
 	// backfaces sitting in the middle of the hull.
 	CockpitMesh->SetVisibility(true);
 
+	// Sits at the seat, not on the camera, so the glass stays with the airframe.
+	HudScreen = CreateDefaultSubobject<UEOHudScreenComponent>(TEXT("HudScreen"));
+	HudScreen->SetupAttachment(CockpitPivot);
+
 	CockpitCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CockpitCamera"));
 	CockpitCamera->SetupAttachment(CockpitPivot);
 	CockpitCamera->bUsePawnControlRotation = false;
@@ -133,6 +139,37 @@ void AEOAircraftPawn::ToggleView()
 
 void AEOAircraftPawn::ApplyViewMode()
 {
+	// The panel only exists in the cockpit; in chase view the HUD goes back to
+	// being drawn flat over the screen, because there is no glass to put it on.
+	if (HudScreen)
+	{
+		// Sit the arc's centre exactly on the eye, so the curve is equidistant all
+		// the way across and the readouts do not stretch toward the edges. Read off
+		// the camera rather than hardcoded, because where the seat is depends on
+		// which cockpit model has been imported - at the pivot origin the panel
+		// sat most of a metre below the pilot's eyeline, behind the dashboard.
+		//
+		// It stays parented to CockpitPivot, not the camera: that is what makes
+		// looking around pan the view across a fixed display.
+		if (CockpitCamera)
+		{
+			HudScreen->SetRelativeLocation(CockpitCamera->GetRelativeLocation());
+		}
+
+		HudScreen->SetVisibility(bFirstPerson);
+	}
+
+	// Two casts, both of which can fail: an unpossessed or AI-flown aircraft has
+	// no player controller, and chaining through one crashed the flight suite the
+	// moment the parked VTOL applied its view mode.
+	if (APlayerController* OwningController = Cast<APlayerController>(GetController()))
+	{
+		if (AEODebugHUD* Hud = Cast<AEODebugHUD>(OwningController->GetHUD()))
+		{
+			Hud->SetProjectionScreen(bFirstPerson ? HudScreen : nullptr);
+		}
+	}
+
 	if (CockpitCamera)
 	{
 		CockpitCamera->SetActive(bFirstPerson);
@@ -731,6 +768,16 @@ void AEOAircraftPawn::PossessedBy(AController* NewController)
 
 void AEOAircraftPawn::UnPossessed()
 {
+	// Hand the HUD back before losing the controller, or it keeps drawing into a
+	// panel the player can no longer see and the operative gets a blank screen.
+	if (APlayerController* OwningController = Cast<APlayerController>(GetController()))
+	{
+		if (AEODebugHUD* Hud = Cast<AEODebugHUD>(OwningController->GetHUD()))
+		{
+			Hud->SetProjectionScreen(nullptr);
+		}
+	}
+
 	Super::UnPossessed();
 
 	// Removing the mapping context can tear an in-progress action down without a

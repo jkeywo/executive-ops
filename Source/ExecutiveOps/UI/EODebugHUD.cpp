@@ -3,6 +3,7 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Core/EOPlayerController.h"
+#include "UI/EOHudScreenComponent.h"
 #include "Aircraft/EOAircraftPawn.h"
 #include "Character/EOOperativeCharacter.h"
 #include "Combat/EOGuardCharacter.h"
@@ -30,9 +31,42 @@ void AEODebugHUD::DrawTextLine(const FString& Text, float& Y, const FLinearColor
 	Y += DebugLineHeight;
 }
 
+void AEODebugHUD::SetProjectionScreen(UEOHudScreenComponent* Screen)
+{
+	ProjectionScreen = Screen;
+}
+
+void AEODebugHUD::DrawInto(UCanvas* TargetCanvas)
+{
+	if (!TargetCanvas)
+	{
+		return;
+	}
+
+	UCanvas* PreviousCanvas = Canvas;
+	Canvas = TargetCanvas;
+
+	DrawHUD();
+
+	Canvas = PreviousCanvas;
+}
+
 void AEODebugHUD::PostRender()
 {
-	Super::PostRender();
+	if (ProjectionScreen)
+	{
+		// Redraw the panel, and deliberately skip Super: it is what calls
+		// DrawHUD, and running it as well would paste a second copy of every
+		// readout flat across the viewport.
+		//
+		// Canvas is assigned by the viewport before PostRender is entered, not by
+		// Super, so it stays valid for the flash below.
+		ProjectionScreen->RedrawFrom(this);
+	}
+	else
+	{
+		Super::PostRender();
+	}
 
 	const AEOPlayerController* EOController = Cast<AEOPlayerController>(PlayerOwner);
 	if (!Canvas || !EOController)
