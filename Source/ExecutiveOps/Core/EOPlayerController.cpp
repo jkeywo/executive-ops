@@ -351,6 +351,36 @@ void AEOPlayerController::ApplyMappingContext(EEOControlMode Mode)
 	}
 }
 
+EEOControlMode AEOPlayerController::GetControlMode() const
+{
+	APawn* Current = GetPawn();
+	if (!Current)
+	{
+		return EEOControlMode::None;
+	}
+
+	// Asked of the pawn through the interfaces rather than by comparing against
+	// the cached Aircraft/Operative pointers, so a pawn this controller has never
+	// resolved still answers correctly.
+	if (Current->Implements<UEOAircraftControlInterface>())
+	{
+		return EEOControlMode::Aircraft;
+	}
+	if (Current->Implements<UEODeployableInterface>())
+	{
+		return EEOControlMode::Operative;
+	}
+
+	return EEOControlMode::None;
+}
+
+void AEOPlayerController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+
+	ApplyMappingContext(GetControlMode());
+}
+
 bool AEOPlayerController::PossessAircraft()
 {
 	if (!ResolveAircraft())
@@ -376,8 +406,6 @@ bool AEOPlayerController::PossessAircraft()
 		IEODeployableInterface::Execute_SetStowed(Operative, true);
 	}
 
-	ControlMode = EEOControlMode::Aircraft;
-	ApplyMappingContext(ControlMode);
 	UE_LOG(LogExecutiveOps, Log, TEXT("Control mode: Aircraft."));
 	return true;
 }
@@ -390,8 +418,6 @@ bool AEOPlayerController::PossessOperative()
 	}
 
 	Possess(Operative);
-	ControlMode = EEOControlMode::Operative;
-	ApplyMappingContext(ControlMode);
 	UE_LOG(LogExecutiveOps, Log, TEXT("Control mode: Operative."));
 	return true;
 }
@@ -405,7 +431,7 @@ AEOMissionSite* AEOPlayerController::GetSelectedSite() const
 
 FString AEOPlayerController::GetDeploymentBlocker() const
 {
-	if (ControlMode != EEOControlMode::Aircraft || !Aircraft)
+	if (GetControlMode() != EEOControlMode::Aircraft || !Aircraft)
 	{
 		return TEXT("not flying");
 	}
@@ -636,7 +662,7 @@ void AEOPlayerController::CompleteExtractionPickup()
 
 void AEOPlayerController::UpdateDeploymentAssist()
 {
-	if (ControlMode != EEOControlMode::Aircraft || !Aircraft)
+	if (GetControlMode() != EEOControlMode::Aircraft || !Aircraft)
 	{
 		return;
 	}
@@ -733,7 +759,7 @@ void AEOPlayerController::AbortDeployment()
 
 bool AEOPlayerController::RequestExtraction()
 {
-	if (ControlMode != EEOControlMode::Operative || !Operative)
+	if (GetControlMode() != EEOControlMode::Operative || !Operative)
 	{
 		return false;
 	}

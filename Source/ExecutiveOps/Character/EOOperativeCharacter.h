@@ -456,4 +456,15 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimSequence> CurrentAnim;
 	FTimerHandle DropTimeoutTimer;
+
+	/**
+	 * Ends a drop: clears the timeout and the flag, and reports whether one was
+	 * actually running.
+	 *
+	 * The pair used to be cleared in three places, and stowing - which is how a
+	 * drop is abandoned when the player flies off - cleared neither. That left
+	 * bDeploying stuck true with a live timer, and HasControl() false forever.
+	 * One writer, so the two cannot drift apart.
+	 */
+	bool EndDeploymentDrop();
 };

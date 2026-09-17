@@ -1107,6 +1107,13 @@ void AEOOperativeCharacter::SetStowed_Implementation(bool bInStowed)
 {
 	bStowed = bInStowed;
 
+	// Stowing is how an abandoned drop ends, so it has to end the drop. Relying on
+	// callers to cancel first worked only because every caller remembered to.
+	if (bStowed)
+	{
+		EndDeploymentDrop();
+	}
+
 	// Order matters: Traversal::Finish re-enables capsule collision, so cancelling
 	// after the disable below would leave a hidden operative with a live blocking
 	// capsule parked wherever its vault stopped.
@@ -1160,6 +1167,18 @@ void AEOOperativeCharacter::UnPossessed()
 	{
 		Movement->MaxWalkSpeed = WalkSpeed;
 	}
+}
+
+bool AEOOperativeCharacter::EndDeploymentDrop()
+{
+	if (!bDeploying)
+	{
+		return false;
+	}
+
+	GetWorldTimerManager().ClearTimer(DropTimeoutTimer);
+	bDeploying = false;
+	return true;
 }
 
 void AEOOperativeCharacter::BeginDeploymentDrop(const FTransform& FromSocket, const FVector& LaunchVelocity)
@@ -1231,13 +1250,10 @@ void AEOOperativeCharacter::Landed(const FHitResult& Hit)
 		}
 	}
 
-	if (!bDeploying)
+	if (!EndDeploymentDrop())
 	{
 		return;
 	}
-
-	GetWorldTimerManager().ClearTimer(DropTimeoutTimer);
-	bDeploying = false;
 
 	Execute_OnDeployComplete(this);
 
@@ -1249,13 +1265,10 @@ void AEOOperativeCharacter::Landed(const FHitResult& Hit)
 
 void AEOOperativeCharacter::CancelDeploymentDrop()
 {
-	if (!bDeploying)
+	if (!EndDeploymentDrop())
 	{
 		return;
 	}
-
-	GetWorldTimerManager().ClearTimer(DropTimeoutTimer);
-	bDeploying = false;
 
 	if (Traversal)
 	{
@@ -1273,7 +1286,7 @@ void AEOOperativeCharacter::CancelDeploymentDrop()
 
 void AEOOperativeCharacter::OnDropTimedOut()
 {
-	if (!bDeploying)
+	if (!EndDeploymentDrop())
 	{
 		return;
 	}
@@ -1282,8 +1295,6 @@ void AEOOperativeCharacter::OnDropTimedOut()
 	// Hand control back anyway rather than leaving the player as a spectator.
 	UE_LOG(LogExecutiveOps, Warning,
 		TEXT("Deployment drop timed out after %.1fs; recovering to the insertion point."), DropTimeout);
-
-	bDeploying = false;
 
 	UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>();
 

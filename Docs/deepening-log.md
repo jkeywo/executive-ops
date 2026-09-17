@@ -40,3 +40,32 @@ event identity moves from `FName` to native gameplay tags.
 - Verified by reading the regenerated asset back: 34 presets, every key a
   `Feedback.*` tag, none left as a bare name.
 
+### C1 - Give the deployment sequence one owner  *(partially done)*
+
+**Done.** `ControlMode` is deleted. `GetControlMode()` now derives the answer from
+the possessed pawn, asked through `IEOAircraftControlInterface` and
+`IEODeployableInterface` rather than by comparing against cached pointers, so a
+pawn this controller never resolved still answers correctly. The mapping context
+moved to an `OnPossess` override, so it follows possession itself instead of
+being applied by the two request methods - which is what made the stored value go
+stale when the game mode possessed the boot pawn first.
+
+Ending a drop is now a single writer, `EndDeploymentDrop()`. It was three, and
+`SetStowed(true)` - which is how an abandoned drop actually ends when the player
+flies off - cleared neither the flag nor the timer. That worked only because
+every caller remembered to cancel first. It now closes by construction.
+
+**[autonomous] Not done: moving the drop timeout into the mission subsystem.**
+The grilled decision was that the mission module owns the sequence and both
+recovery timers. Implementing that turned out to require the subsystem to hold an
+operative reference and to perform the timeout recovery itself - which is
+teleporting a pawn to an insertion point and resetting its movement mode. That is
+pawn behaviour, and putting it in the mission module would buy timer co-location
+at the cost of the subsystem knowing how to recover a character. Judged a worse
+trade than the problem it solves, so the timer stays on the character and the
+three-way drift it caused is fixed by the single-writer change instead.
+
+Worth revisiting if the operative ever becomes an `IEOMissionParticipantInterface`
+implementer - the subsystem already pushes state to participants, and that is the
+route by which it could own the sequence without holding pawn pointers.
+

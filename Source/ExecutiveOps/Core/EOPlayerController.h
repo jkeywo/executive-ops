@@ -29,8 +29,15 @@ public:
 
 	const UEOInputConfig* GetInputConfig() const { return InputConfig; }
 
+	/**
+	 * Which pawn the player is driving, derived from the pawn itself.
+	 *
+	 * Deliberately not stored. It was, and it went stale the moment anything
+	 * possessed a pawn outside PossessAircraft/PossessOperative - which the game
+	 * mode does on its very first RestartPlayer.
+	 */
 	UFUNCTION(BlueprintPure, Category = "Control")
-	EEOControlMode GetControlMode() const { return ControlMode; }
+	EEOControlMode GetControlMode() const;
 
 	/** Possess the aircraft, swapping to the flight mapping context. */
 	UFUNCTION(BlueprintCallable, Category = "Control")
@@ -127,6 +134,13 @@ protected:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+
+	/**
+	 * The mapping context follows possession rather than the two request methods,
+	 * so a pawn possessed by anything else - the game mode's first RestartPlayer,
+	 * a cheat, a test - still gets the right bindings.
+	 */
+	virtual void OnPossess(APawn* InPawn) override;
 
 	/** Enables the aircraft's assist while the player is lined up over the site. */
 	void UpdateDeploymentAssist();
@@ -237,6 +251,4 @@ private:
 	/** Where each pawn started, so EOReset can put them back. */
 	FTransform AircraftStartTransform;
 	FTransform OperativeStartTransform;
-
-	EEOControlMode ControlMode = EEOControlMode::None;
 };
