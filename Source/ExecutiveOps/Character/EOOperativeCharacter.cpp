@@ -18,6 +18,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Core/EOPlayerController.h"
 #include "Input/EOInputConfig.h"
+#include "Input/EOInputSettings.h"
 #include "Mission/EOMissionSite.h"
 #include "Mission/EOMissionSubsystem.h"
 #include "TimerManager.h"
@@ -947,11 +948,11 @@ void AEOOperativeCharacter::Input_Look(const FInputActionValue& Value)
 	const FVector2D Axis = Value.Get<FVector2D>();
 
 	// AddControllerPitchInput subtracts from pitch, and Mouse2D reports +Y when
-	// the mouse moves up, so the raw axis looks down when pushed up. Negated here
-	// rather than in the mapping so the config's bInvertMouseY keeps meaning
-	// "invert relative to standard" for both pawns.
+	// the mouse moves up, so the raw axis looks down when pushed up. The standard
+	// scheme is that negation; the player's inversion preference multiplies it,
+	// read per event so that changing it applies immediately.
 	AddControllerYawInput(Axis.X * LookSensitivity);
-	AddControllerPitchInput(-Axis.Y * LookSensitivity);
+	AddControllerPitchInput(-Axis.Y * LookSensitivity * UEOInputSettings::MouseSign());
 
 	MarkLookInput(Axis);
 }
@@ -969,7 +970,7 @@ void AEOOperativeCharacter::Input_LookStick(const FInputActionValue& Value)
 	const float Scale = StickLookRate * GetWorld()->GetDeltaSeconds();
 
 	AddControllerYawInput(Axis.X * Scale);
-	AddControllerPitchInput(-Axis.Y * Scale);
+	AddControllerPitchInput(-Axis.Y * Scale * UEOInputSettings::StickSign());
 
 	MarkLookInput(Axis);
 }

@@ -35,12 +35,6 @@ public:
 	 * Mouse and stick get separate flags because the two have opposite
 	 * conventions and players routinely want one inverted and not the other.
 	 */
-	UPROPERTY(EditAnywhere, Category = "Input|Look")
-	bool bInvertMouseY = false;
-
-	UPROPERTY(EditAnywhere, Category = "Input|Look")
-	bool bInvertStickY = false;
-
 	/** Aircraft and operative use separate contexts so only one is ever active. */
 	UPROPERTY(VisibleAnywhere, Category = "Input|Contexts")
 	TObjectPtr<UInputMappingContext> AircraftContext;

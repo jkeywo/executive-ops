@@ -91,15 +91,10 @@ void UEOInputConfig::BuildDefaultMappings()
 	AircraftContext->MapKey(ToggleMapAction, EKeys::M);
 	AircraftContext->MapKey(ToggleViewAction, EKeys::V);
 
-	// Mouse Y is negated only when the player asks for it. Previously this was
-	// hard-negated, which is what made vertical look feel inverted.
-	{
-		FEnhancedActionKeyMapping& Look = AircraftContext->MapKey(LookAction, EKeys::Mouse2D);
-		if (bInvertMouseY)
-		{
-			Look.Modifiers.Add(MakeNegate(this, false, true, false));
-		}
-	}
+	// Inversion is not baked in here. It is applied where the look value is
+	// consumed, from UEOInputSettings, so changing it takes effect without a
+	// context rebuild - which this class has no way to do.
+	AircraftContext->MapKey(LookAction, EKeys::Mouse2D);
 
 	// ---- Gamepad -------------------------------------------------------------
 	// Left stick flies, right stick looks, triggers climb and descend, shoulders
@@ -120,14 +115,7 @@ void UEOInputConfig::BuildDefaultMappings()
 	AircraftContext->MapKey(ToggleMapAction, EKeys::Gamepad_FaceButton_Top);
 	AircraftContext->MapKey(ToggleViewAction, EKeys::Gamepad_RightThumbstick);
 
-	{
-		FEnhancedActionKeyMapping& Stick =
-			AircraftContext->MapKey(LookStickAction, EKeys::Gamepad_Right2D);
-		if (bInvertStickY)
-		{
-			Stick.Modifiers.Add(MakeNegate(this, false, true, false));
-		}
-	}
+	AircraftContext->MapKey(LookStickAction, EKeys::Gamepad_Right2D);
 
 	// --- Operative ------------------------------------------------------------
 	OperativeContext->MapKey(MoveAction, EKeys::W).Modifiers.Add(MakeSwizzleYXZ(this));
@@ -153,13 +141,7 @@ void UEOInputConfig::BuildDefaultMappings()
 	OperativeContext->MapKey(AimAction, EKeys::RightMouseButton);
 	OperativeContext->MapKey(InteractAction, EKeys::E);
 
-	{
-		FEnhancedActionKeyMapping& Look = OperativeContext->MapKey(LookAction, EKeys::Mouse2D);
-		if (bInvertMouseY)
-		{
-			Look.Modifiers.Add(MakeNegate(this, false, true, false));
-		}
-	}
+	OperativeContext->MapKey(LookAction, EKeys::Mouse2D);
 
 	// ---- Gamepad -------------------------------------------------------------
 	OperativeContext->MapKey(MoveAction, EKeys::Gamepad_Left2D);
@@ -173,12 +155,5 @@ void UEOInputConfig::BuildDefaultMappings()
 	OperativeContext->MapKey(AimAction, EKeys::Gamepad_LeftTrigger);
 	OperativeContext->MapKey(FireAction, EKeys::Gamepad_RightTrigger);
 
-	{
-		FEnhancedActionKeyMapping& Stick =
-			OperativeContext->MapKey(LookStickAction, EKeys::Gamepad_Right2D);
-		if (bInvertStickY)
-		{
-			Stick.Modifiers.Add(MakeNegate(this, false, true, false));
-		}
-	}
+	OperativeContext->MapKey(LookStickAction, EKeys::Gamepad_Right2D);
 }

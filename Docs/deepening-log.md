@@ -119,3 +119,52 @@ event rather than a choice of function.
 
 **Not done: extracting UEOWeaponComponent.** See the end of this log.
 
+### C8 - Two input settings that cannot take effect  *(partially done)*
+
+**Done: the settings are real.** `bInvertMouseY` and `bInvertStickY` moved to
+`UEOInputSettings` (a `UDeveloperSettings`) and are read where a look value is
+consumed, in all four handlers, rather than baked into a `UInputModifierNegate`
+at context-build time. Changing one now applies immediately. The mappings no
+longer carry the inversion at all.
+
+- **[autonomous] Deviation from the grilled decision.** The grilling chose
+  Enhanced Input's own user settings, which persist per user. That needs a
+  settings subclass, `bEnableUserSettings`, and save-game plumbing, and it is a
+  player-facing options feature rather than the defect. `UDeveloperSettings`
+  matches the pattern already in the project for feedback and makes the setting
+  work today. Recorded as `Docs/adr/0008` so the intended destination is not
+  lost.
+
+**Not done: moving the mappings to IMC assets**, and `UEOInputConfig` becoming a
+`UDataAsset`. That is asset generation work on the scale of the existing Python
+build scripts, and with the inversion no longer baked in, the config being
+rebuilt each run is no longer a correctness problem - only a
+not-authorable-in-the-editor one. It is the remaining half of this candidate.
+
+### C4 - Make the checks independent of the run  *(partially done)*
+
+**Done: the first checks that do not require playing the game.**
+`Source/ExecutiveOps/Tests/EOMissionSubsystemTest.cpp` puts three checks on the
+engine's automation seam: the legal route through the loop, an illegal
+transition being refused without touching state, and reset returning to inactive
+from mid-mission. They run from the Session Frontend or headless, individually,
+in about a second, and a failure names the module rather than the phase the run
+happened to die in.
+
+The mission state machine was chosen first because it needs nothing but a world:
+no map, no actors, no pawns. `FScopedTestWorld` builds and tears one down, which
+is the pattern the rest of the module-level checks can follow.
+
+- **[autonomous]** The tests sit in the existing module under
+  `#if WITH_AUTOMATION_TESTS` rather than in a separate one. The grilling chose a
+  separate module excluded from the Game target, and that is still right for
+  `UEOSelfTest` and `UEOCheatManager` - but it cannot be done by moving files
+  alone: `AEOPlayerController` constructs the self-test and sets `CheatClass`, so
+  a runtime module would depend on a developer module, which is backwards.
+  Inverting that needs a registration hook, and is its own job. `WITH_AUTOMATION_TESTS`
+  is 0 in shipping, so the new tests do not ship either way.
+
+**Not done:** converting the 143 existing checks, converting the two suites to
+`AFunctionalTest`, and moving the self-test and cheat manager out of the shipping
+module.
+

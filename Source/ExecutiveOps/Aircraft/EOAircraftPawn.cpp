@@ -13,6 +13,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Core/EOPlayerController.h"
 #include "Input/EOInputConfig.h"
+#include "Input/EOInputSettings.h"
 #include "UI/EODebugHUD.h"
 #include "UI/EOHudScreenComponent.h"
 #include "UI/EONavigationHUD.h"
@@ -659,7 +660,9 @@ void AEOAircraftPawn::Input_Look(const FInputActionValue& Value)
 		return;
 	}
 
-	ApplyLookDelta(Axis * LookSensitivity);
+	// Inversion is applied here rather than baked into the mapping, so that
+	// changing the setting takes effect without rebuilding the context.
+	ApplyLookDelta(FVector2D(Axis.X, Axis.Y * UEOInputSettings::MouseSign()) * LookSensitivity);
 }
 
 void AEOAircraftPawn::Input_LookStick(const FInputActionValue& Value)
@@ -672,7 +675,8 @@ void AEOAircraftPawn::Input_LookStick(const FInputActionValue& Value)
 
 	// A stick reports a held position, so it is a rate: scale by delta time or
 	// the camera whips round faster the better the frame rate.
-	ApplyLookDelta(Axis * StickLookRate * GetWorld()->GetDeltaSeconds());
+	ApplyLookDelta(FVector2D(Axis.X, Axis.Y * UEOInputSettings::StickSign())
+		* StickLookRate * GetWorld()->GetDeltaSeconds());
 }
 
 void AEOAircraftPawn::ApplyLookDelta(const FVector2D& Delta)
