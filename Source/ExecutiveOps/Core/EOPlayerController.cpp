@@ -7,6 +7,7 @@
 #include "EngineUtils.h"
 #include "ExecutiveOps.h"
 #include "Debug/EOCheatManager.h"
+#include "Debug/EOSelfTest.h"
 #include "Input/EOInputConfig.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Interfaces/EODeployableInterface.h"
@@ -19,11 +20,17 @@ AEOPlayerController::AEOPlayerController()
 	OperativeClass = AEOOperativeCharacter::StaticClass();
 }
 
+void AEOPlayerController::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	InputConfig = NewObject<UEOInputConfig>(this, TEXT("EOInputConfig"));
+	InputConfig->BuildRuntimeInput();
+}
+
 void AEOPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
-
-	InputConfig = NewObject<UEOInputConfig>(this, TEXT("EOInputConfig"));
 
 	// Boot into whichever pawn the map actually provides, preferring the aircraft.
 	if (ResolveAircraft())
@@ -37,6 +44,23 @@ void AEOPlayerController::BeginPlay()
 	else
 	{
 		UE_LOG(LogExecutiveOps, Error, TEXT("No aircraft or operative available; player has no pawn."));
+	}
+
+	if (UEOSelfTest::IsRequested())
+	{
+		// Deferred a tick: the transitions need a fully possessed pawn.
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, this, &AEOPlayerController::RunSelfTest, 0.5f, false);
+	}
+}
+
+void AEOPlayerController::RunSelfTest()
+{
+	const bool bPassed = UEOSelfTest::Run(this);
+
+	if (UEOSelfTest::ShouldExitAfterRun())
+	{
+		FPlatformMisc::RequestExitWithStatus(/*bForce=*/false, bPassed ? 0 : 1);
 	}
 }
 

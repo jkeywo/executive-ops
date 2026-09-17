@@ -30,8 +30,23 @@ Build Tools install includes none of them, so check explicitly:
 4. Build the `ExecutiveOpsEditor` target (Development Editor, Win64).
 5. Open `ExecutiveOps.uproject`.
 
-See [`Docs/M0-Editor-Checklist.md`](Docs/M0-Editor-Checklist.md) for the steps that must be
-done inside the editor (maps, character mesh, animation import).
+6. Restore the animation packs (excluded from git, ~1.2 GB):
+   `./Scripts/import_animation_packs.ps1`
+
+The maps and Blueprints are already built and committed. `Scripts/m0_setup.py` regenerates
+them from scratch if needed:
+
+```
+UnrealEditor-Cmd.exe ExecutiveOps.uproject -run=pythonscript -script="Scripts/m0_setup.py"
+```
+
+## Verifying the build
+
+An in-engine self-test drives the whole M0 loop and exits non-zero on failure:
+
+```
+UnrealEditor-Cmd.exe ExecutiveOps.uproject /Game/Maps/L_FlightTest -game -nullrhi -unattended -EOSelfTest -EOSelfTestExit
+```
 
 ## Controls
 

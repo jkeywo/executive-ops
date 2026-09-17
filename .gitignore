@@ -73,3 +73,11 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+# Licensed third-party animation packs (~1.2 GB).
+#
+# Excluded deliberately: they would exceed GitHub's free Git LFS quota, and they
+# are store-licensed content each developer obtains themselves. Restore them with
+# Scripts/import_animation_packs.ps1 before opening the project.
+/Content/OpenWorldAnimset/
+/Content/FightingAnimsetPro/

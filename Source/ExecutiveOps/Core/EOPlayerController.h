@@ -53,7 +53,17 @@ public:
 	void EOReset();
 
 protected:
+	/**
+	 * Input config is built here rather than in BeginPlay: the game mode possesses
+	 * the default pawn before BeginPlay runs, and that pawn's
+	 * SetupPlayerInputComponent needs the config to already exist.
+	 */
+	virtual void PostInitializeComponents() override;
+
 	virtual void BeginPlay() override;
+
+	/** Entry point for the -EOSelfTest command-line switch. */
+	void RunSelfTest();
 
 	/** Finds the first aircraft/operative in the level, or spawns one if absent. */
 	AEOAircraftPawn* ResolveAircraft();

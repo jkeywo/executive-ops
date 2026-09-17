@@ -20,7 +20,14 @@ class EXECUTIVEOPS_API UEOInputConfig : public UObject
 	GENERATED_BODY()
 
 public:
-	UEOInputConfig();
+	/**
+	 * Builds the actions and mapping contexts. Must be called explicitly after
+	 * NewObject - this cannot happen in the constructor, because UE forbids
+	 * unnamed NewObject calls inside a UObject constructor.
+	 *
+	 * Idempotent.
+	 */
+	void BuildRuntimeInput();
 
 	/** Aircraft and operative use separate contexts so only one is ever active. */
 	UPROPERTY(VisibleAnywhere, Category = "Input|Contexts")
@@ -62,4 +69,6 @@ public:
 private:
 	/** Builds the two mapping contexts with keyboard/mouse defaults. */
 	void BuildDefaultMappings();
+
+	bool bBuilt = false;
 };

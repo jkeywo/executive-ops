@@ -33,13 +33,13 @@ namespace
 	}
 }
 
-UEOInputConfig::UEOInputConfig()
+void UEOInputConfig::BuildRuntimeInput()
 {
-	// The CDO must stay empty; these objects are built for real instances only.
-	if (HasAnyFlags(RF_ClassDefaultObject))
+	if (bBuilt)
 	{
 		return;
 	}
+	bBuilt = true;
 
 	LookAction           = MakeAction(this, TEXT("IA_Look"),           EInputActionValueType::Axis2D);
 
