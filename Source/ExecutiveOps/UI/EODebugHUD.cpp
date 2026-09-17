@@ -7,6 +7,7 @@
 #include "Character/EOOperativeCharacter.h"
 #include "Combat/EOGuardCharacter.h"
 #include "Combat/EOHealthComponent.h"
+#include "Mission/EOInteractableInterface.h"
 #include "EngineUtils.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Mission/EOMissionSubsystem.h"
@@ -104,11 +105,18 @@ void AEODebugHUD::DrawHUD()
 			DrawTextLine(TEXT("Weapon:   AIMING"), Y, FLinearColor(0.2f, 0.9f, 1.f));
 		}
 
-		// The takedown prompt is driven by the same test the action uses, so it
-		// can never offer a kill the input would then refuse.
+		// Both prompts are driven by the same tests the actions use, so the HUD
+		// can never offer something the key would then refuse.
 		if (Operative->FindTakedownTarget())
 		{
 			DrawTextLine(TEXT("TAKEDOWN [F]"), Y, FLinearColor::Green);
+		}
+
+		if (AActor* Interactable = Operative->FindInteractable())
+		{
+			DrawTextLine(
+				IEOInteractableInterface::Execute_GetInteractionPrompt(Interactable).ToString(),
+				Y, FLinearColor(1.f, 0.75f, 0.1f));
 		}
 
 		// Guard awareness: what the player needs to read to know if they are

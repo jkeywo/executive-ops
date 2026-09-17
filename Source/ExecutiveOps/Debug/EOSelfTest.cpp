@@ -12,7 +12,10 @@
 #include "ExecutiveOps.h"
 #include "GameFramework/Character.h"
 #include "Interfaces/EOAircraftControlInterface.h"
+#include "Mission/EOExtractionZone.h"
+#include "Mission/EOInteractableInterface.h"
 #include "Mission/EOMissionSite.h"
+#include "Mission/EOObjectiveTerminal.h"
 #include "Mission/EOMissionSubsystem.h"
 #include "TimerManager.h"
 
@@ -54,6 +57,48 @@ AEOGuardCharacter* UEOSelfTest::GetGuard() const
 		return *It;
 	}
 	return nullptr;
+}
+
+AEOObjectiveTerminal* UEOSelfTest::GetObjective() const
+{
+	if (!Controller || !Controller->GetWorld())
+	{
+		return nullptr;
+	}
+	for (TActorIterator<AEOObjectiveTerminal> It(Controller->GetWorld()); It; ++It)
+	{
+		return *It;
+	}
+	return nullptr;
+}
+
+AEOExtractionZone* UEOSelfTest::GetExtractionZone() const
+{
+	if (!Controller || !Controller->GetWorld())
+	{
+		return nullptr;
+	}
+	for (TActorIterator<AEOExtractionZone> It(Controller->GetWorld()); It; ++It)
+	{
+		return *It;
+	}
+	return nullptr;
+}
+
+bool UEOSelfTest::EnterGroundMission()
+{
+	UEOMissionSubsystem* Mission = Controller
+		? Controller->GetWorld()->GetSubsystem<UEOMissionSubsystem>() : nullptr;
+	if (!Mission)
+	{
+		return false;
+	}
+
+	// Stands in for the flight and the drop, which the flight suite covers.
+	Mission->ResetMission();
+	return Mission->StartMission()
+		&& Mission->BeginDeployment()
+		&& Mission->CompleteDeployment();
 }
 
 void UEOSelfTest::ResetEncounter()
@@ -800,7 +845,12 @@ void UEOSelfTest::Step()
 
 		Op->SetActorLocation(Guard->GetActorLocation() + Guard->GetActorForwardVector() * 400.f,
 			false, nullptr, ETeleportType::TeleportPhysics);
-		Op->SetActorRotation((Guard->GetActorLocation() - Op->GetActorLocation()).Rotation());
+
+		// The weapon aims where the CAMERA looks, and the camera boom follows the
+		// control rotation - so pointing the body at the guard is not enough.
+		const FRotator AimAt = (Guard->GetActorLocation() - Op->GetActorLocation()).Rotation();
+		Op->SetActorRotation(FRotator(0.f, AimAt.Yaw, 0.f));
+		Controller->SetControlRotation(AimAt);
 
 		// Fire the actual weapon, so the trace channel and the damage path are
 		// both exercised rather than assumed.
@@ -848,7 +898,135 @@ void UEOSelfTest::Step()
 			Check(!Guard->CanSeeTarget(), TEXT("guard cannot see a player who has broken contact"));
 			Check(Guard->GetDetectionAlpha() < 1.f, TEXT("awareness decays once contact is broken"));
 		}
-		Advance(EPhase::Done, 0.f);
+		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M6: the mission, run twice --"));
+		MissionAttempt = 1;
+		Advance(EPhase::MissionSetup, 0.f);
+		break;
+	}
+
+	case EPhase::MissionSetup:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		AEOObjectiveTerminal* Objective = GetObjective();
+		AEOExtractionZone* Zone = GetExtractionZone();
+
+		const FString Pass = FString::Printf(TEXT("run %d:"), MissionAttempt);
+
+		Check(Objective != nullptr, FString::Printf(TEXT("%s the arena has an objective"), *Pass));
+		Check(Zone != nullptr, FString::Printf(TEXT("%s the arena has an extraction zone"), *Pass));
+
+		if (!Op || !Objective || !Zone)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		ResetEncounter();
+		Check(EnterGroundMission(), FString::Printf(TEXT("%s insertion reaches OnGround"), *Pass));
+
+		// The objective must be fresh, or the second run has nothing to do.
+		Check(!Objective->IsComplete(), FString::Printf(TEXT("%s objective starts incomplete"), *Pass));
+
+		// Extraction must be dark until the objective is done, or the player is
+		// being told to leave before they have done anything.
+		Check(!IEOExtractionInterface::Execute_IsExtractionAvailable(Zone),
+			FString::Printf(TEXT("%s extraction is unavailable before the objective"), *Pass));
+
+		// Standing at the extraction point early does nothing.
+		Op->SetActorLocation(Zone->GetActorLocation(), false, nullptr, ETeleportType::TeleportPhysics);
+		Check(Op->FindInteractable() == nullptr,
+			FString::Printf(TEXT("%s nothing to interact with at a dormant extraction"), *Pass));
+
+		Advance(EPhase::MissionObjective, 0.2f);
+		break;
+	}
+
+	case EPhase::MissionObjective:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		AEOObjectiveTerminal* Objective = GetObjective();
+		AEOExtractionZone* Zone = GetExtractionZone();
+
+		const FString Pass = FString::Printf(TEXT("run %d:"), MissionAttempt);
+
+		if (!Op || !Objective || !Zone)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		// Cross the arena to the terminal.
+		Op->SetActorLocation(Objective->GetActorLocation() + FVector(200.f, 0.f, 0.f),
+			false, nullptr, ETeleportType::TeleportPhysics);
+
+		Check(Op->FindInteractable() == Objective,
+			FString::Printf(TEXT("%s the terminal offers itself when reached"), *Pass));
+		Check(Op->TryInteract(), FString::Printf(TEXT("%s interacting completes the objective"), *Pass));
+		Check(Objective->IsComplete(), FString::Printf(TEXT("%s objective reports complete"), *Pass));
+		Check(Mission && Mission->GetMissionState() == EEOMissionState::ObjectiveComplete,
+			FString::Printf(TEXT("%s mission reaches ObjectiveComplete"), *Pass));
+
+		// Doing it twice must not double-fire the transition.
+		Check(!Op->TryInteract(), FString::Printf(TEXT("%s the objective cannot be done twice"), *Pass));
+
+		Check(IEOExtractionInterface::Execute_IsExtractionAvailable(Zone),
+			FString::Printf(TEXT("%s extraction arms once the objective is done"), *Pass));
+
+		Advance(EPhase::MissionExtract, 0.2f);
+		break;
+	}
+
+	case EPhase::MissionExtract:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		AEOExtractionZone* Zone = GetExtractionZone();
+
+		const FString Pass = FString::Printf(TEXT("run %d:"), MissionAttempt);
+
+		if (!Op || !Zone)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		// Run back across the arena to the pad.
+		Op->SetActorLocation(Zone->GetActorLocation(), false, nullptr, ETeleportType::TeleportPhysics);
+		Check(Zone->IsWithinZone(Op), FString::Printf(TEXT("%s standing in the extraction zone"), *Pass));
+		Check(Op->FindInteractable() == Zone,
+			FString::Printf(TEXT("%s the pad offers extraction"), *Pass));
+
+		Check(Op->TryInteract(), FString::Printf(TEXT("%s extracting works"), *Pass));
+		Check(Mission && Mission->GetMissionState() == EEOMissionState::Complete,
+			FString::Printf(TEXT("%s mission reaches Complete"), *Pass));
+		Check(Controller->GetControlMode() == EEOControlMode::Aircraft,
+			FString::Printf(TEXT("%s extraction returns the player to the aircraft"), *Pass));
+
+		if (MissionAttempt >= 2)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		// The whole point of M6: it has to be playable again without debug help.
+		UE_LOG(LogExecutiveOps, Display,
+			TEXT("[SelfTest] -- M6: resetting and running the mission again --"));
+		Controller->EOReset();
+		MissionAttempt = 2;
+		Advance(EPhase::MissionSecondRun, 0.5f);
+		break;
+	}
+
+	case EPhase::MissionSecondRun:
+	{
+		// EOReset put the player back in the aircraft; the ground suite needs the
+		// operative again before the second run can start.
+		Check(Controller->PossessOperative(), TEXT("run 2: can possess the operative again"));
+
+		if (AEOOperativeCharacter* Op = GetOperative())
+		{
+			IEODeployableInterface::Execute_SetStowed(Op, false);
+		}
+		Advance(EPhase::MissionSetup, 0.2f);
 		break;
 	}
 

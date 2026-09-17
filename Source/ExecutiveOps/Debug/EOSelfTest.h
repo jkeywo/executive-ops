@@ -80,6 +80,12 @@ private:
 		GuardLosesPlayer,
 		GuardLostConfirm,
 
+		// M6: the whole ground mission, run twice to prove it repeats.
+		MissionSetup,
+		MissionObjective,
+		MissionExtract,
+		MissionSecondRun,
+
 		Done
 	};
 
@@ -109,6 +115,18 @@ private:
 
 	/** Puts the operative and the guard back to a known, unaware starting state. */
 	void ResetEncounter();
+
+	/** Drives the mission to OnGround, standing in for a completed insertion. */
+	bool EnterGroundMission();
+
+	/** Walks one full mission: objective then extraction. Returns true if it closed. */
+	void RunMissionLeg(int32 Attempt);
+
+	class AEOObjectiveTerminal* GetObjective() const;
+	class AEOExtractionZone* GetExtractionZone() const;
+
+	/** Which pass through the mission is running: 1 first, 2 the repeat. */
+	int32 MissionAttempt = 0;
 
 	void Check(bool bCondition, const FString& Description);
 	void Finish();

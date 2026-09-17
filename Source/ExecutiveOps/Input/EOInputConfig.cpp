@@ -57,6 +57,7 @@ void UEOInputConfig::BuildRuntimeInput()
 	TakedownAction       = MakeAction(this, TEXT("IA_Takedown"),       EInputActionValueType::Boolean);
 	FireAction           = MakeAction(this, TEXT("IA_Fire"),           EInputActionValueType::Boolean);
 	AimAction            = MakeAction(this, TEXT("IA_Aim"),            EInputActionValueType::Boolean);
+	InteractAction       = MakeAction(this, TEXT("IA_Interact"),       EInputActionValueType::Boolean);
 
 	AircraftContext  = NewObject<UInputMappingContext>(this, TEXT("IMC_Aircraft"));
 	OperativeContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Operative"));
@@ -111,6 +112,7 @@ void UEOInputConfig::BuildDefaultMappings()
 	OperativeContext->MapKey(TakedownAction, EKeys::F);
 	OperativeContext->MapKey(FireAction, EKeys::LeftMouseButton);
 	OperativeContext->MapKey(AimAction, EKeys::RightMouseButton);
+	OperativeContext->MapKey(InteractAction, EKeys::E);
 
 	OperativeContext->MapKey(LookAction, EKeys::Mouse2D).Modifiers.Add(MakeNegate(this, false, true, false));
 }

@@ -65,6 +65,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Control")
 	AEOMissionSite* GetSelectedSite() const;
 
+	/**
+	 * Put the mission back to a runnable state after it has closed out.
+	 *
+	 * Called automatically a beat after Complete or Failed, so the player can fly
+	 * another run without typing a console command - which is precisely what M6
+	 * means by "repeatedly without debug intervention".
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Mission")
+	void RearmMission();
+
 	/** Unwind a deployment in progress and put the player back in the aircraft. */
 	UFUNCTION(BlueprintCallable, Category = "Control")
 	void AbortDeployment();
@@ -89,6 +99,13 @@ protected:
 
 	/** Entry point for the -EOSelfTest command-line switch. */
 	void RunSelfTest();
+
+	UFUNCTION()
+	void HandleMissionStateChanged(EEOMissionState OldState, EEOMissionState NewState);
+
+	/** Seconds the outcome is left on screen before the mission re-arms. */
+	UPROPERTY(EditDefaultsOnly, Category = "Mission")
+	float RearmDelay = 3.f;
 
 	/** Finds the first aircraft/operative in the level, or spawns one if absent. */
 	AEOAircraftPawn* ResolveAircraft();
@@ -116,6 +133,8 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UEOSelfTest> SelfTest;
+
+	FTimerHandle RearmTimer;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AEOAircraftPawn> Aircraft;

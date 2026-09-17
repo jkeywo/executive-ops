@@ -65,6 +65,7 @@ UnrealEditor-Cmd.exe ExecutiveOps.uproject /Game/Maps/L_FlightTest -game -nullrh
 | Slide | — | `Ctrl` or `C` while sprinting |
 | Takedown | — | `F` (behind an unaware guard) |
 | Fire / Aim | — | `LMB` / `RMB` |
+| Interact | — | `E` (objective, extraction) |
 
 Bindings are declared in C++ in [`EOInputConfig.cpp`](Source/ExecutiveOps/Input/EOInputConfig.cpp)
 rather than as `.uasset` files, so a fresh clone is playable with no content to import.

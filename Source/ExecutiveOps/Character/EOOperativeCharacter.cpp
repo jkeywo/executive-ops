@@ -5,6 +5,7 @@
 #include "Character/EOTraversalComponent.h"
 #include "Combat/EOGuardCharacter.h"
 #include "Combat/EOHealthComponent.h"
+#include "Mission/EOInteractableInterface.h"
 #include "EngineUtils.h"
 #include "Components/CapsuleComponent.h"
 #include "EnhancedInputComponent.h"
@@ -244,6 +245,70 @@ void AEOOperativeCharacter::HandleDied(AActor* Killer)
 	{
 		Mission->FailMission();
 	}
+}
+
+AActor* AEOOperativeCharacter::FindInteractable() const
+{
+	UWorld* World = GetWorld();
+	if (!World || !HasControl() || IsDead())
+	{
+		return nullptr;
+	}
+
+	AActor* Best = nullptr;
+	float BestDistanceSq = TNumericLimits<float>::Max();
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Candidate = *It;
+		if (!Candidate || !Candidate->Implements<UEOInteractableInterface>())
+		{
+			continue;
+		}
+
+		// Each interactable decides its own reach, so a wide extraction pad and a
+		// terminal you have to stand at can coexist without a magic constant here.
+		const float Range = FMath::Min(
+			IEOInteractableInterface::Execute_GetInteractionRange(Candidate), MaxInteractionRange);
+
+		const float DistanceSq = FVector::DistSquared(Candidate->GetActorLocation(), GetActorLocation());
+		if (DistanceSq > Range * Range)
+		{
+			continue;
+		}
+
+		if (!IEOInteractableInterface::Execute_CanInteract(Candidate, const_cast<AEOOperativeCharacter*>(this)))
+		{
+			continue;
+		}
+
+		if (DistanceSq < BestDistanceSq)
+		{
+			BestDistanceSq = DistanceSq;
+			Best = Candidate;
+		}
+	}
+
+	return Best;
+}
+
+bool AEOOperativeCharacter::TryInteract()
+{
+	// Consistent with the takedown and the traversal: not while the character is
+	// already committed to something that owns its transform.
+	if (IsPerformingTakedown() || (Traversal && Traversal->IsTraversing()))
+	{
+		return false;
+	}
+
+	AActor* Interactable = FindInteractable();
+	if (!Interactable)
+	{
+		UE_LOG(LogExecutiveOps, Verbose, TEXT("Interact: nothing in range."));
+		return false;
+	}
+
+	return IEOInteractableInterface::Execute_Interact(Interactable, this);
 }
 
 void AEOOperativeCharacter::ResetOperative()
@@ -497,6 +562,7 @@ void AEOOperativeCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	Input->BindAction(Config->FireAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_Fire);
 	Input->BindAction(Config->AimAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_AimStart);
 	Input->BindAction(Config->AimAction, ETriggerEvent::Completed, this, &AEOOperativeCharacter::Input_AimStop);
+	Input->BindAction(Config->InteractAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_Interact);
 }
 
 void AEOOperativeCharacter::Input_Move(const FInputActionValue& Value)
@@ -612,6 +678,11 @@ void AEOOperativeCharacter::Input_AimStart(const FInputActionValue& Value)
 void AEOOperativeCharacter::Input_AimStop(const FInputActionValue& Value)
 {
 	bAiming = false;
+}
+
+void AEOOperativeCharacter::Input_Interact(const FInputActionValue& Value)
+{
+	TryInteract();
 }
 
 void AEOOperativeCharacter::Input_SlideStop(const FInputActionValue& Value)

@@ -15,6 +15,8 @@
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Interfaces/EODeployableInterface.h"
 #include "Mission/EOMissionSite.h"
+#include "Mission/EOObjectiveTerminal.h"
+#include "TimerManager.h"
 #include "Mission/EOMissionSubsystem.h"
 
 AEOPlayerController::AEOPlayerController()
@@ -54,12 +56,67 @@ void AEOPlayerController::BeginPlay()
 		UE_LOG(LogExecutiveOps, Error, TEXT("No aircraft or operative available; player has no pawn."));
 	}
 
+	if (UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())
+	{
+		Mission->OnMissionStateChanged.AddDynamic(
+			this, &AEOPlayerController::HandleMissionStateChanged);
+	}
+
 	if (UEOSelfTest::IsRequested())
 	{
 		// Deferred a tick: the transitions need a fully possessed pawn.
 		FTimerHandle Handle;
 		GetWorldTimerManager().SetTimer(Handle, this, &AEOPlayerController::RunSelfTest, 0.5f, false);
 	}
+}
+
+void AEOPlayerController::HandleMissionStateChanged(EEOMissionState OldState, EEOMissionState NewState)
+{
+	// Complete and Failed are terminal: nothing transitions out of them, and the
+	// deployment gate refuses anything that is not Inactive or InFlight. Without
+	// this the player finishes one run and the deploy key is dead until they open
+	// the console.
+	if (NewState == EEOMissionState::Complete || NewState == EEOMissionState::Failed)
+	{
+		GetWorldTimerManager().SetTimer(
+			RearmTimer, this, &AEOPlayerController::RearmMission, RearmDelay, false);
+	}
+}
+
+void AEOPlayerController::RearmMission()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// The objective is the one piece of mission state that is not owned by the
+	// subsystem, so re-arming has to reach into it explicitly. Left set, the
+	// second run has a terminal that can never be interacted with and an
+	// extraction that can never arm.
+	for (TActorIterator<AEOObjectiveTerminal> It(World); It; ++It)
+	{
+		It->ResetObjective();
+	}
+
+	for (TActorIterator<AEOGuardCharacter> It(World); It; ++It)
+	{
+		It->ResetGuard();
+	}
+
+	if (Operative)
+	{
+		Operative->ResetOperative();
+		IEODeployableInterface::Execute_SetStowed(Operative, true);
+	}
+
+	if (UEOMissionSubsystem* Mission = World->GetSubsystem<UEOMissionSubsystem>())
+	{
+		Mission->ResetMission();
+	}
+
+	UE_LOG(LogExecutiveOps, Log, TEXT("Mission re-armed; ready for another run."));
 }
 
 void AEOPlayerController::RunSelfTest()
@@ -373,15 +430,32 @@ bool AEOPlayerController::RequestExtraction()
 		return false;
 	}
 
+	UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>();
+
+	// An extraction called with the objective done closes the mission out. Called
+	// at any other time it is just the debug handover back to the aircraft, which
+	// the self-test and the cheat manager both rely on.
+	const bool bCompletesMission =
+		Mission && Mission->GetMissionState() == EEOMissionState::ObjectiveComplete;
+
 	IEODeployableInterface::Execute_OnExtractBegin(Operative, Aircraft);
 
+	// Possession first. Committing the state machine to Extracting and then
+	// failing to possess would strand the mission in a state nothing transitions
+	// out of, with the player still standing on the ground.
 	if (!PossessAircraft())
 	{
 		return false;
 	}
 
-	// M7 drives the real sequence through the mission subsystem; M0 just returns control.
-	UE_LOG(LogExecutiveOps, Log, TEXT("Extraction placeholder: returned to aircraft control."));
+	if (bCompletesMission)
+	{
+		// M7 replaces this instant hand-back with the aircraft actually arriving.
+		Mission->BeginExtraction();
+		Mission->CompleteMission();
+		UE_LOG(LogExecutiveOps, Log, TEXT("Mission complete."));
+	}
+
 	return true;
 }
 
@@ -412,6 +486,13 @@ void AEOPlayerController::EOReset()
 	{
 		It->ResetGuard();
 	}
+
+	for (TActorIterator<AEOObjectiveTerminal> It(GetWorld()); It; ++It)
+	{
+		It->ResetObjective();
+	}
+
+	GetWorldTimerManager().ClearTimer(RearmTimer);
 
 	if (UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())
 	{

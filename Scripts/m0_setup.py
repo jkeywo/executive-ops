@@ -416,6 +416,35 @@ def build_mission_map(guard_bp=None):
             unreal.Rotator(0, 90, 0))
         guard.set_actor_label("Guard")
 
+    cube = unreal.load_asset(CUBE)
+
+    # --- Objective ----------------------------------------------------------
+    # At the far end of the route, past the guard: reaching it is the mission.
+    terminal = EAS.spawn_actor_from_class(
+        unreal.EOObjectiveTerminal, unreal.Vector(9800, 1200, 190))
+    terminal.set_actor_label("ObjectiveTerminal")
+    tbody = terminal.get_editor_property("Body")
+    tbody.set_editor_property("static_mesh", cube)
+    tbody.set_editor_property("relative_scale3d", unreal.Vector(1.2, 1.2, 1.8))
+    if mat:
+        tbody.set_material(0, mat)
+    tbeacon = terminal.get_editor_property("Beacon")
+    tbeacon.set_editor_property("static_mesh", cube)
+    if mat:
+        tbeacon.set_material(0, mat)
+
+    # --- Extraction ---------------------------------------------------------
+    # Back near the insertion point, so leaving means crossing the arena again -
+    # past a guard that may now be looking for you.
+    extraction = EAS.spawn_actor_from_class(
+        unreal.EOExtractionZone, unreal.Vector(600, 2600, 96))
+    extraction.set_actor_label("ExtractionZone")
+    for prop in ("Pad", "Beacon"):
+        comp = extraction.get_editor_property(prop)
+        comp.set_editor_property("static_mesh", cube)
+        if mat:
+            comp.set_material(0, mat)
+
     start = EAS.spawn_actor_from_class(
         unreal.PlayerStart, unreal.Vector(0, 0, 200), unreal.Rotator(0, 0, 0))
     start.set_actor_label("PlayerStart")
@@ -476,9 +505,22 @@ def verify():
         check(EAL.does_asset_exist(path), "asset exists: " + path)
 
     if ELAS.load_level(MAPS + "/L_MissionTest"):
-        guards = [a for a in EAS.get_all_level_actors()
-                  if isinstance(a, unreal.EOGuardCharacter)]
-        check(len(guards) == 1, "L_MissionTest has exactly 1 guard (found {})".format(len(guards)))
+        actors = EAS.get_all_level_actors()
+
+        for label, cls in [("guard", unreal.EOGuardCharacter),
+                           ("objective", unreal.EOObjectiveTerminal),
+                           ("extraction zone", unreal.EOExtractionZone)]:
+            found = [a for a in actors if isinstance(a, cls)]
+            check(len(found) == 1,
+                  "L_MissionTest has exactly 1 {} (found {})".format(label, len(found)))
+
+        # Leaving has to mean crossing the arena, not stepping sideways.
+        terminals = [a for a in actors if isinstance(a, unreal.EOObjectiveTerminal)]
+        zones = [a for a in actors if isinstance(a, unreal.EOExtractionZone)]
+        if terminals and zones:
+            dist = terminals[0].get_actor_location().distance(zones[0].get_actor_location())
+            check(dist > 5000,
+                  "objective and extraction are a real distance apart ({:.0f}cm)".format(dist))
 
     # Existence is not enough - load each map and confirm it actually has content.
     for path, min_actors in [(MAPS + "/L_MissionTest", 20), (MAPS + "/L_FlightTest", 40)]:

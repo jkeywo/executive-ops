@@ -60,6 +60,7 @@ protected:
 	void Input_Fire(const FInputActionValue& Value);
 	void Input_AimStart(const FInputActionValue& Value);
 	void Input_AimStop(const FInputActionValue& Value);
+	void Input_Interact(const FInputActionValue& Value);
 
 	UFUNCTION()
 	void HandleDied(AActor* Killer);
@@ -105,6 +106,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Takedown")
 	float TakedownDuration = 0.7f;
+
+	/** Upper bound on interaction range; each interactable may ask for less. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Interaction")
+	float MaxInteractionRange = 600.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
 	TObjectPtr<UAnimSequence> TakedownAnim;
@@ -246,6 +251,18 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Combat")
 	void ResetOperative();
+
+	/**
+	 * The nearest thing in range that is willing to be interacted with, or null.
+	 * Drives both the prompt and the action, so the HUD can never offer something
+	 * the key would then refuse.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Interaction")
+	AActor* FindInteractable() const;
+
+	/** Interact with whatever FindInteractable returns. */
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	bool TryInteract();
 
 	/** True during the takedown animation, when the player is committed. */
 	UFUNCTION(BlueprintPure, Category = "Combat")

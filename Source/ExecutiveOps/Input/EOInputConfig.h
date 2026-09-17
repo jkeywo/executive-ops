@@ -81,6 +81,9 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
 	TObjectPtr<UInputAction> AimAction;
 
+	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
+	TObjectPtr<UInputAction> InteractAction;
+
 private:
 	/** Builds the two mapping contexts with keyboard/mouse defaults. */
 	void BuildDefaultMappings();
