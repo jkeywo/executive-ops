@@ -70,13 +70,13 @@ def preset(
     p.set_editor_property("volume_multiplier", volume)
     p.set_editor_property("pitch_jitter", pitch_jitter)
     p.set_editor_property("effect_scale", effect_scale)
-    p.set_editor_property("b_attach_effect", attach_effect)
+    p.set_editor_property("attach_effect", attach_effect)
     p.set_editor_property("camera_shake_scale", shake_scale)
     p.set_editor_property("fov_impulse", fov)
     p.set_editor_property("fov_impulse_decay", fov_decay)
     p.set_editor_property("vignette_intensity", vignette)
     p.set_editor_property("vignette_decay", vignette_decay)
-    p.set_editor_property("b_directional_indicator", directional)
+    p.set_editor_property("directional_indicator", directional)
     p.set_editor_property("hit_stop_seconds", hit_stop)
 
     if sound is not None:
@@ -282,7 +282,7 @@ def build_presets():
         intensity=unreal.EOFeedbackIntensity.NORMAL,
     )
     presets["Pistol_HitCharacter"] = preset(
-        sound=first_existing(VOX + "/HumanMaleB/Cues/voice_male_grunt_pain_01_Cue"),
+        sound=first_existing(VOX + "/HumanMaleB/Cues/voice_male_b_hurt_pain_set_1_01_Cue"),
         effect=first_existing(NIAGARA + "/Impacts/NS_Impact_Wood"),
         volume=1.0,
         pitch_jitter=0.12,
@@ -347,7 +347,7 @@ def build_presets():
         intensity=unreal.EOFeedbackIntensity.NORMAL,
     )
     presets["Guard_Death"] = preset(
-        sound=first_existing(VOX + "/HumanMaleC/Cues/voice_male_grunt_pain_death_01_Cue"),
+        sound=first_existing(VOX + "/HumanMaleC/Cues/voice_male_c_death_01_Cue"),
         volume=1.0,
         pitch_jitter=0.1,
         intensity=unreal.EOFeedbackIntensity.NORMAL,

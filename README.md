@@ -49,6 +49,12 @@ Build Tools install includes none of them, so check explicitly:
    UnrealEditor-Cmd.exe ExecutiveOps.uproject -run=pythonscript -script="Scripts/m8_build_feedback_presets.py"
    ```
 
+   The models in `Raw/` are imported the same way, and are also idempotent:
+   `Scripts/import_playership.py`, `Scripts/import_pistol.py` and
+   `Scripts/import_cockpit.py`, all sharing `Scripts/eo_model_import.py`.
+   Pass the script path in full - a relative one resolves against the engine's
+   own binaries directory, not the project.
+
    See [`Docs/M8-Feedback.md`](Docs/M8-Feedback.md) for how game feel is wired.
 
 The maps and Blueprints are already built and committed. `Scripts/m0_setup.py` regenerates
@@ -79,11 +85,16 @@ UnrealEditor-Cmd.exe ExecutiveOps.uproject /Game/Maps/L_FlightTest -game -nullrh
 | Jump | — | `Space` |
 | Deploy | `F` (in the zone, hovering) | — |
 | Tactical map | `M` | — |
+| Cockpit / chase view | `V` | — |
 | Vault / mantle / climb | — | `Space` (contextual) |
 | Slide | — | `Ctrl` or `C` while sprinting |
 | Takedown | — | `F` (behind an unaware guard) |
 | Fire / Aim | — | `LMB` / `RMB` |
 | Interact | — | `E` (objective, extraction) |
+
+Flying is first person from the cockpit by default; `V` swaps to the chase
+camera. Free-look in the cockpit is clamped to what a seated pilot could
+reasonably glance at, so the view stays inside the canopy.
 
 Holding aim swaps the ground control scheme: the operative's body locks to the
 camera, so the mouse points them directly and `A`/`D` strafe instead of turning.

@@ -104,3 +104,6 @@ Raw/*
 /Content/Vefects/
 /Content/Chameleon/
 /Content/ChameleonLayers/
+
+# Python bytecode from the editor scripting layer
+Scripts/__pycache__/

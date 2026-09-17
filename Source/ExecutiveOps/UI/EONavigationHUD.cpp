@@ -1,4 +1,5 @@
 #include "UI/EONavigationHUD.h"
+#include "UI/EOHUDUnits.h"
 
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
@@ -18,7 +19,6 @@ namespace
 	const FLinearColor PlayerColour(0.2f, 0.9f, 1.f);
 
 	/** cm -> metres, for a distance readout a pilot can actually use. */
-	constexpr float CmToM = 0.01f;
 }
 
 AEONavigationHUD::AEONavigationHUD()
@@ -59,7 +59,7 @@ void AEONavigationHUD::DrawHUD()
 void AEONavigationHUD::DrawWaypoint(const AEOMissionSite& Site, const FVector& ViewerLocation)
 {
 	const FVector Target = Site.GetHoverPoint();
-	const float DistanceM = FVector::Dist(ViewerLocation, Target) * CmToM;
+	const float DistanceM = FVector::Dist(ViewerLocation, Target) * EOHUD::CmToM;
 
 	const FVector Screen = Project(Target);
 

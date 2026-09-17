@@ -1,4 +1,5 @@
 #include "UI/EOPlayerHUD.h"
+#include "UI/EOHUDUnits.h"
 
 #include "Aircraft/EOAircraftPawn.h"
 #include "Character/EOOperativeCharacter.h"
@@ -33,8 +34,6 @@ namespace
 	const FLinearColor PanelBorder(0.902f, 0.945f, 0.957f, 0.16f);
 	const FLinearColor Hairline(0.902f, 0.945f, 0.957f, 0.10f);
 
-	constexpr float CmToM = 0.01f;
-	constexpr float CmsToKph = 0.036f;
 
 	/** Degrees from where the player is facing to a world position, wrapped to +-180. */
 	float RelativeBearing(const FVector& From, const FVector& To, float ReferenceYaw)
@@ -358,7 +357,7 @@ void AEOPlayerHUD::DrawAssetSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 	else if (S.Aircraft)
 	{
 		Distance = FString::Printf(TEXT("%.0f M"),
-			FVector::Dist(S.Aircraft->GetActorLocation(), S.Pawn->GetActorLocation()) * CmToM);
+			FVector::Dist(S.Aircraft->GetActorLocation(), S.Pawn->GetActorLocation()) * EOHUD::CmToM);
 	}
 
 	DrawHeadline(Distance, X + Pad, Y + L.S(36.f), L.Scale, Ink);
@@ -584,13 +583,13 @@ void AEOPlayerHUD::DrawFeedSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 		if (S.Site)
 		{
 			Rows.Add({ S.Site->GetDisplayName().ToString().ToUpper(), TEXT("CONTRACT"),
-				static_cast<float>(FVector::Dist(ViewerLocation, S.Site->GetHoverPoint()) * CmToM), true });
+				static_cast<float>(FVector::Dist(ViewerLocation, S.Site->GetHoverPoint()) * EOHUD::CmToM), true });
 		}
 
 		if (S.Extraction && IEOExtractionInterface::Execute_IsExtractionAvailable(S.Extraction))
 		{
 			Rows.Add({ TEXT("EXTRACTION PAD"), TEXT("PICKUP"),
-				static_cast<float>(FVector::Dist(ViewerLocation, S.Extraction->GetActorLocation()) * CmToM), false });
+				static_cast<float>(FVector::Dist(ViewerLocation, S.Extraction->GetActorLocation()) * EOHUD::CmToM), false });
 		}
 
 		if (Rows.Num() == 0)
@@ -655,7 +654,7 @@ void AEOPlayerHUD::DrawFeedSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 
 		DrawBody(StateText, X + L.S(6.f), Y + L.S(4.f), L.Scale, Colour);
 		DrawRightText(FString::Printf(TEXT("%.0fM"),
-			FVector::Dist(ViewerLocation, Guard->GetActorLocation()) * CmToM),
+			FVector::Dist(ViewerLocation, Guard->GetActorLocation()) * EOHUD::CmToM),
 			X + W, Y + L.S(6.f), SmallFont(), L.Scale, Dim);
 
 		DrawSegmentBar(X + L.S(6.f), Y + L.S(28.f), W - L.S(12.f), L.S(5.f), 5,
@@ -787,9 +786,9 @@ void AEOPlayerHUD::DrawSelfSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 	{
 		// Three numerals, because that is what flying one of these needs: how fast,
 		// how high, and which way the altitude is going.
-		const float Speed = IEOAircraftControlInterface::Execute_GetCurrentSpeed(S.Aircraft) * CmsToKph;
+		const float Speed = IEOAircraftControlInterface::Execute_GetCurrentSpeed(S.Aircraft) * EOHUD::CmsToKph;
 		const float Altitude = MeasureAltitude(*S.Aircraft);
-		const float Vertical = S.Aircraft->GetVelocity().Z * CmToM;
+		const float Vertical = S.Aircraft->GetVelocity().Z * EOHUD::CmToM;
 
 		const float ColumnW = (W - Pad * 2.f) / 3.f;
 
@@ -936,7 +935,7 @@ void AEOPlayerHUD::DrawCommitSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 	}
 
 	const bool bAvailable = IEOExtractionInterface::Execute_IsExtractionAvailable(S.Extraction);
-	const float DistanceM = FVector::Dist(S.Extraction->GetActorLocation(), S.Pawn->GetActorLocation()) * CmToM;
+	const float DistanceM = FVector::Dist(S.Extraction->GetActorLocation(), S.Pawn->GetActorLocation()) * EOHUD::CmToM;
 
 	if (!bAvailable)
 	{
@@ -1181,5 +1180,5 @@ float AEOPlayerHUD::MeasureAltitude(const AEOAircraftPawn& Craft) const
 		return -1.f;
 	}
 
-	return Hit.Distance * CmToM;
+	return Hit.Distance * EOHUD::CmToM;
 }

@@ -7,6 +7,7 @@
 
 class UAnimSequence;
 class UCameraComponent;
+class UStaticMeshComponent;
 class UEOTraversalComponent;
 class UEOHealthComponent;
 class AEOGuardCharacter;
@@ -90,6 +91,12 @@ protected:
 	/** Switches between the free-movement and aiming control schemes. */
 	void SetAiming(bool bNewAiming);
 
+	/** Decides each frame whether the pistol belongs in the hand or on the hip. */
+	void UpdateWeaponAttachment(float DeltaSeconds);
+
+	/** Moves the pistol between the two sockets. No-op if it is already there. */
+	void ApplyWeaponAttachment(bool bDrawn);
+
 	/** Suspends the auto-follow for a moment after any deliberate look input. */
 	void MarkLookInput(const FVector2D& Axis);
 
@@ -104,6 +111,36 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<UEOHealthComponent> Health;
+
+	/** The pistol itself. Rides a bone at all times; only which bone changes. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Weapon")
+	TObjectPtr<UStaticMeshComponent> PistolMesh;
+
+	// ---- Weapon carry ----------------------------------------------------------
+	// Bone names rather than sockets, so the pistol works on any mannequin-derived
+	// skeleton without someone first authoring sockets on it.
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	FName HolsterSocket = TEXT("thigh_r");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	FName GripSocket = TEXT("hand_r");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	FVector HolsterOffset = FVector(4.f, 6.f, -12.f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	FRotator HolsterRotation = FRotator(0.f, 0.f, 90.f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	FVector GripOffset = FVector(-2.f, 4.f, 0.f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	FRotator GripRotation = FRotator(0.f, 90.f, 0.f);
+
+	/** How long the pistol stays out after a shot fired without aiming. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon", meta = (ClampMin = "0"))
+	float HolsterDelay = 3.f;
 
 	// ---- Weapon: one pistol, kept deliberately simple ------------------------
 
@@ -199,6 +236,10 @@ protected:
 	/** Seconds the auto-follow stays out of the way after a look input. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0"))
 	float LookHoldTime = 0.6f;
+
+	/** How long a movement press keeps the auto-follow live after it is released. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0"))
+	float MoveInputHoldTime = 0.15f;
 
 	/** Vertical impact speed above which a landing counts as hard. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0"))
@@ -337,7 +378,10 @@ private:
 	float CachedBrakingDeceleration = 2000.f;
 
 	bool bAiming = false;
+	bool bWeaponDrawn = false;
+	float HolsterDelayRemaining = 0.f;
 	float LookHoldRemaining = 0.f;
+	float MoveInputHoldRemaining = 0.f;
 	float FireCooldown = 0.f;
 	float TakedownRemaining = 0.f;
 

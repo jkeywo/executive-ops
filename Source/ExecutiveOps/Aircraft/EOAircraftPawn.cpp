@@ -75,6 +75,24 @@ AEOAircraftPawn::AEOAircraftPawn()
 	ChaseCamera->bUsePawnControlRotation = false;
 	ChaseCamera->SetFieldOfView(CameraFOVBase);
 
+	// The cockpit rides on HullPivot rather than the root, so banking rolls the
+	// pilot's view with the craft. That roll is most of why first person reads as
+	// flying rather than as a camera being dragged through the air.
+	CockpitPivot = CreateDefaultSubobject<USceneComponent>(TEXT("CockpitPivot"));
+	CockpitPivot->SetupAttachment(HullPivot);
+
+	CockpitMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("CockpitMesh"));
+	CockpitMesh->SetupAttachment(CockpitPivot);
+	CockpitMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// Never in the chase view: from outside, an interior shell is a box of
+	// backfaces sitting in the middle of the hull.
+	CockpitMesh->SetVisibility(true);
+
+	CockpitCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CockpitCamera"));
+	CockpitCamera->SetupAttachment(CockpitPivot);
+	CockpitCamera->bUsePawnControlRotation = false;
+	CockpitCamera->SetFieldOfView(CockpitFOV);
+
 	EngineAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("EngineAudio"));
 	EngineAudio->SetupAttachment(RootComponent);
 	EngineAudio->bAutoActivate = false;
@@ -90,6 +108,68 @@ void AEOAircraftPawn::BeginPlay()
 	{
 		EngineAudio->SetSound(EngineLoopSound);
 		EngineAudio->Play();
+	}
+
+	// Applied rather than assumed: the components are constructed with both
+	// cameras active, and whichever one wins would otherwise be arbitrary.
+	ApplyViewMode();
+}
+
+void AEOAircraftPawn::SetFirstPerson(bool bNewFirstPerson)
+{
+	if (bFirstPerson == bNewFirstPerson)
+	{
+		return;
+	}
+
+	bFirstPerson = bNewFirstPerson;
+	ApplyViewMode();
+}
+
+void AEOAircraftPawn::ToggleView()
+{
+	SetFirstPerson(!bFirstPerson);
+}
+
+void AEOAircraftPawn::ApplyViewMode()
+{
+	if (CockpitCamera)
+	{
+		CockpitCamera->SetActive(bFirstPerson);
+	}
+	if (ChaseCamera)
+	{
+		ChaseCamera->SetActive(!bFirstPerson);
+	}
+
+	// The hull is a solid exterior shell. Sitting inside it, the nose fills the
+	// view from behind, so it is hidden to the pilot and restored for the chase.
+	//
+	// Conditional on someone actually being in the cockpit, not merely on the
+	// mode: once the player deploys, the aircraft is scenery to them, and an
+	// unoccupied craft flying around as a floating cockpit is a bug the player
+	// sees from the ground.
+	if (HullMesh)
+	{
+		const bool bOccupied = GetController() != nullptr;
+		HullMesh->SetVisibility(!(bFirstPerson && bHideHullInCockpit && bOccupied));
+	}
+
+	// Same reasoning for the interior: from outside it is a box of backfaces in
+	// the middle of the hull.
+	if (CockpitMesh)
+	{
+		CockpitMesh->SetVisibility(bFirstPerson && GetController() != nullptr);
+	}
+
+	// Free-look carries over between views and would otherwise leave the cockpit
+	// facing sideways the moment the player switched in.
+	LookYawOffset = 0.f;
+	LookPitchOffset = 0.f;
+
+	if (CockpitPivot)
+	{
+		CockpitPivot->SetRelativeRotation(FRotator::ZeroRotator);
 	}
 }
 
@@ -340,20 +420,30 @@ void AEOAircraftPawn::UpdateAttitude(float DeltaSeconds)
 
 void AEOAircraftPawn::UpdateLook(float DeltaSeconds)
 {
-	if (!CameraBoom)
-	{
-		return;
-	}
-
 	// Let go of the mouse and the camera swings back behind the craft, so the
-	// default view is always the one you fly with.
+	// default view is always the one you fly with. In the cockpit the same offsets
+	// turn the pilot's head instead of swinging a boom.
 	if (!bLookActiveThisFrame)
 	{
 		LookYawOffset = FMath::FInterpTo(LookYawOffset, 0.f, DeltaSeconds, LookRecenterSpeed);
 		LookPitchOffset = FMath::FInterpTo(LookPitchOffset, 0.f, DeltaSeconds, LookRecenterSpeed);
 	}
 
-	CameraBoom->SetRelativeRotation(FRotator(LookPitchOffset, LookYawOffset, 0.f));
+	const FRotator Offset(LookPitchOffset, LookYawOffset, 0.f);
+
+	if (bFirstPerson)
+	{
+		if (CockpitPivot)
+		{
+			CockpitPivot->SetRelativeRotation(Offset);
+		}
+		return;
+	}
+
+	if (CameraBoom)
+	{
+		CameraBoom->SetRelativeRotation(Offset);
+	}
 }
 
 void AEOAircraftPawn::UpdateCamera(float DeltaSeconds)
@@ -370,6 +460,24 @@ void AEOAircraftPawn::UpdateCamera(float DeltaSeconds)
 	const float TargetArm = FMath::Lerp(CameraDistanceHover, CameraDistanceFast, SpeedAlpha);
 	CameraBoom->TargetArmLength =
 		FMath::FInterpTo(CameraBoom->TargetArmLength, TargetArm, DeltaSeconds, 3.f);
+
+	if (bFirstPerson && CockpitCamera)
+	{
+		// The cockpit widens far less. Inside a canopy the frame is fixed in view,
+		// so a large FOV swing reads as the canopy warping rather than as speed.
+		float CockpitImpulse = 0.f;
+		if (const UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+		{
+			CockpitImpulse = Feedback->GetFOVImpulse() * CockpitFOVImpulseScale;
+		}
+
+		const float TargetCockpitFOV = FMath::Lerp(CockpitFOV, CockpitFOVFast, SpeedAlpha);
+		SmoothedCockpitFOV = FMath::FInterpTo(
+			SmoothedCockpitFOV > 0.f ? SmoothedCockpitFOV : TargetCockpitFOV,
+			TargetCockpitFOV, DeltaSeconds, 3.f);
+
+		CockpitCamera->SetFieldOfView(FMath::Clamp(SmoothedCockpitFOV + CockpitImpulse, 60.f, 130.f));
+	}
 
 	// The steady-state FOV eases; the feedback impulse is added on top afterwards
 	// so a braking kick is not smoothed away to nothing before it is visible.
@@ -492,6 +600,7 @@ void AEOAircraftPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	Input->BindAction(Config->HoverAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_HoverStop);
 	Input->BindAction(Config->DeployAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_Deploy);
 	Input->BindAction(Config->ToggleMapAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_ToggleMap);
+	Input->BindAction(Config->ToggleViewAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_ToggleView);
 }
 
 void AEOAircraftPawn::Input_Move(const FInputActionValue& Value)
@@ -555,8 +664,15 @@ void AEOAircraftPawn::ApplyLookDelta(const FVector2D& Delta)
 {
 	// Free-look is a bounded offset on the boom rather than controller rotation,
 	// because the controller must not be allowed to rotate the hull.
-	LookYawOffset = FMath::Clamp(LookYawOffset + Delta.X, -MaxLookYaw, MaxLookYaw);
-	LookPitchOffset = FMath::Clamp(LookPitchOffset + Delta.Y, -MaxLookPitch, MaxLookPitch);
+	//
+	// The cockpit gets much tighter limits: a seated pilot can glance around the
+	// canopy, not turn their head through the bulkhead behind them. Without this,
+	// first-person free-look swings the view straight out through the fuselage.
+	const float YawLimit = bFirstPerson ? CockpitMaxLookYaw : MaxLookYaw;
+	const float PitchLimit = bFirstPerson ? CockpitMaxLookPitch : MaxLookPitch;
+
+	LookYawOffset = FMath::Clamp(LookYawOffset + Delta.X, -YawLimit, YawLimit);
+	LookPitchOffset = FMath::Clamp(LookPitchOffset + Delta.Y, -PitchLimit, PitchLimit);
 	bLookActiveThisFrame = true;
 }
 
@@ -568,6 +684,11 @@ void AEOAircraftPawn::Input_HoverStart(const FInputActionValue& Value)
 void AEOAircraftPawn::Input_HoverStop(const FInputActionValue& Value)
 {
 	Execute_SetHoverEnabled(this, false);
+}
+
+void AEOAircraftPawn::Input_ToggleView(const FInputActionValue& Value)
+{
+	ToggleView();
 }
 
 void AEOAircraftPawn::Input_ToggleMap(const FInputActionValue& Value)
@@ -593,6 +714,10 @@ void AEOAircraftPawn::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 	ClearControlDemand();
+
+	// Whether the hull is hidden depends on someone actually sitting in the
+	// cockpit, so it has to be re-evaluated whenever that changes.
+	ApplyViewMode();
 }
 
 void AEOAircraftPawn::UnPossessed()
@@ -602,6 +727,8 @@ void AEOAircraftPawn::UnPossessed()
 	// Removing the mapping context can tear an in-progress action down without a
 	// Completed event, which would otherwise leave hover latched on forever.
 	ClearControlDemand();
+
+	ApplyViewMode();
 }
 
 void AEOAircraftPawn::ClearControlDemand()

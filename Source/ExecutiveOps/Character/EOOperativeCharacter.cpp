@@ -65,6 +65,14 @@ AEOOperativeCharacter::AEOOperativeCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	// Attached to the body, not the root: the pistol has to ride the animation,
+	// which means it lives on a bone whether it is holstered or drawn.
+	PistolMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PistolMesh"));
+	PistolMesh->SetupAttachment(GetMesh(), HolsterSocket);
+	PistolMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PistolMesh->SetRelativeLocation(HolsterOffset);
+	PistolMesh->SetRelativeRotation(HolsterRotation);
+
 	Traversal = CreateDefaultSubobject<UEOTraversalComponent>(TEXT("Traversal"));
 	Health = CreateDefaultSubobject<UEOHealthComponent>(TEXT("Health"));
 
@@ -89,6 +97,52 @@ void AEOOperativeCharacter::BeginPlay()
 		Health->OnDied.AddDynamic(this, &AEOOperativeCharacter::HandleDied);
 		Health->OnDamaged.AddDynamic(this, &AEOOperativeCharacter::HandleDamaged);
 	}
+
+	// Forced rather than assumed: the constructor attached to the holster, but the
+	// offsets may have been retuned on the Blueprint since.
+	bWeaponDrawn = true;
+	ApplyWeaponAttachment(false);
+}
+
+void AEOOperativeCharacter::ApplyWeaponAttachment(bool bDrawn)
+{
+	if (!PistolMesh || bWeaponDrawn == bDrawn)
+	{
+		return;
+	}
+
+	bWeaponDrawn = bDrawn;
+
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!Body)
+	{
+		return;
+	}
+
+	const FName Socket = bDrawn ? GripSocket : HolsterSocket;
+
+	PistolMesh->AttachToComponent(Body,
+		FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+
+	PistolMesh->SetRelativeLocation(bDrawn ? GripOffset : HolsterOffset);
+	PistolMesh->SetRelativeRotation(bDrawn ? GripRotation : HolsterRotation);
+}
+
+void AEOOperativeCharacter::UpdateWeaponAttachment(float DeltaSeconds)
+{
+	HolsterDelayRemaining = FMath::Max(0.f, HolsterDelayRemaining - DeltaSeconds);
+
+	// In the hand while aiming, and for a beat after a shot so a snap shot from
+	// the hip does not fire from a holstered weapon and put it straight back.
+	// Holstered whenever the operative has no business holding it.
+	const bool bWantsDrawn = HasControl()
+		&& !IsDead()
+		&& !IsPerformingTakedown()
+		&& !(Traversal && Traversal->IsTraversing())
+		&& !bSliding
+		&& (bAiming || HolsterDelayRemaining > 0.f);
+
+	ApplyWeaponAttachment(bWantsDrawn);
 }
 
 void AEOOperativeCharacter::HandleDamaged(float Amount, AActor* DamageInstigator)
@@ -240,6 +294,11 @@ bool AEOOperativeCharacter::FireWeapon()
 	}
 
 	FireCooldown = WeaponInterval;
+	HolsterDelayRemaining = HolsterDelay;
+
+	// Drawn on the same frame as the shot, so the muzzle effect below has a weapon
+	// in hand to come from rather than one still on the hip.
+	ApplyWeaponAttachment(true);
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(EOOperativeShot), false, this);
 	// The impact preset is chosen by surface, so the trace has to bring one back.
@@ -270,7 +329,11 @@ bool AEOOperativeCharacter::FireWeapon()
 	{
 		FEOFeedbackContext Shot = FEOFeedbackContext::At(Muzzle);
 		Shot.Rotation = Direction.Rotation();
-		Shot.AttachTo = GetMesh();
+		// From the weapon when there is one, from the body when the mesh has not
+		// been assigned yet - the muzzle flash must not float at the origin.
+		Shot.AttachTo = (PistolMesh && PistolMesh->GetStaticMesh())
+			? static_cast<USceneComponent*>(PistolMesh)
+			: static_cast<USceneComponent*>(GetMesh());
 		Feedback->Play(EOFeedbackEvents::Pistol_Fire, Shot);
 	}
 
@@ -449,6 +512,7 @@ void AEOOperativeCharacter::Tick(float DeltaSeconds)
 
 	TickCombat(DeltaSeconds);
 	TickSlide(DeltaSeconds);
+	UpdateWeaponAttachment(DeltaSeconds);
 	UpdateFollowCamera(DeltaSeconds);
 	UpdateLocomotionAnimation();
 }
@@ -456,9 +520,10 @@ void AEOOperativeCharacter::Tick(float DeltaSeconds)
 void AEOOperativeCharacter::UpdateFollowCamera(float DeltaSeconds)
 {
 	LookHoldRemaining = FMath::Max(0.f, LookHoldRemaining - DeltaSeconds);
+	MoveInputHoldRemaining = FMath::Max(0.f, MoveInputHoldRemaining - DeltaSeconds);
 
 	AController* OwningController = GetController();
-	if (!OwningController || DeltaSeconds <= 0.f)
+	if (!OwningController || DeltaSeconds <= 0.f || MoveInputHoldRemaining <= 0.f)
 	{
 		return;
 	}
@@ -738,6 +803,12 @@ void AEOOperativeCharacter::Input_Move(const FInputActionValue& Value)
 	{
 		return;
 	}
+
+	// The auto-follow keys off this rather than off velocity. Residual motion is
+	// not steering: a teleport, a shove or a slide's run-out should not drag the
+	// view round, and scripted code that sets the control rotation deliberately
+	// must not have it stolen back a frame later.
+	MoveInputHoldRemaining = MoveInputHoldTime;
 
 	// Move relative to where the camera is looking, flattened to the ground plane.
 	const FRotator YawOnly(0.f, Controller->GetControlRotation().Yaw, 0.f);

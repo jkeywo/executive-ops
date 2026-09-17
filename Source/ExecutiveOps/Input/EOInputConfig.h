@@ -79,6 +79,10 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Input|Aircraft")
 	TObjectPtr<UInputAction> DeployAction;
 
+	/** Cockpit or chase camera. */
+	UPROPERTY(VisibleAnywhere, Category = "Input|Aircraft")
+	TObjectPtr<UInputAction> ToggleViewAction;
+
 	UPROPERTY(VisibleAnywhere, Category = "Input|Aircraft")
 	TObjectPtr<UInputAction> ToggleMapAction;
 

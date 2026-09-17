@@ -50,6 +50,7 @@ void UEOInputConfig::BuildRuntimeInput()
 	HoverAction          = MakeAction(this, TEXT("IA_Hover"),          EInputActionValueType::Boolean);
 	DeployAction         = MakeAction(this, TEXT("IA_Deploy"),         EInputActionValueType::Boolean);
 	ToggleMapAction      = MakeAction(this, TEXT("IA_ToggleMap"),      EInputActionValueType::Boolean);
+	ToggleViewAction     = MakeAction(this, TEXT("IA_ToggleView"),     EInputActionValueType::Boolean);
 
 	MoveAction           = MakeAction(this, TEXT("IA_Move"),           EInputActionValueType::Axis2D);
 	JumpAction           = MakeAction(this, TEXT("IA_Jump"),           EInputActionValueType::Boolean);
@@ -88,6 +89,7 @@ void UEOInputConfig::BuildDefaultMappings()
 	AircraftContext->MapKey(HoverAction, EKeys::LeftShift);
 	AircraftContext->MapKey(DeployAction, EKeys::F);
 	AircraftContext->MapKey(ToggleMapAction, EKeys::M);
+	AircraftContext->MapKey(ToggleViewAction, EKeys::V);
 
 	// Mouse Y is negated only when the player asks for it. Previously this was
 	// hard-negated, which is what made vertical look feel inverted.
@@ -116,6 +118,7 @@ void UEOInputConfig::BuildDefaultMappings()
 	AircraftContext->MapKey(HoverAction, EKeys::Gamepad_FaceButton_Left);
 	AircraftContext->MapKey(DeployAction, EKeys::Gamepad_FaceButton_Bottom);
 	AircraftContext->MapKey(ToggleMapAction, EKeys::Gamepad_FaceButton_Top);
+	AircraftContext->MapKey(ToggleViewAction, EKeys::Gamepad_RightThumbstick);
 
 	{
 		FEnhancedActionKeyMapping& Stick =

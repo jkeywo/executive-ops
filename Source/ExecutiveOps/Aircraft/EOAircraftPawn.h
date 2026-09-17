@@ -65,6 +65,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Aircraft")
 	float GetThrustAlpha() const { return ThrustAlpha; }
 
+	/** True when flying from the cockpit rather than the chase camera. */
+	UFUNCTION(BlueprintPure, Category = "Camera")
+	bool IsFirstPerson() const { return bFirstPerson; }
+
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void SetFirstPerson(bool bNewFirstPerson);
+
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void ToggleView();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
@@ -83,6 +93,10 @@ protected:
 	void Input_HoverStop(const FInputActionValue& Value);
 	void Input_Deploy(const FInputActionValue& Value);
 	void Input_ToggleMap(const FInputActionValue& Value);
+	void Input_ToggleView(const FInputActionValue& Value);
+
+	/** Activates the right camera and hides whatever the other view should not see. */
+	void ApplyViewMode();
 
 	/** Integrate velocity from the current input, then sweep the actor through the world. */
 	void UpdateFlight(float DeltaSeconds);
@@ -142,6 +156,16 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<UCameraComponent> ChaseCamera;
+
+	/** Carries the cockpit interior and the pilot's viewpoint, and banks with the hull. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<USceneComponent> CockpitPivot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<UStaticMeshComponent> CockpitMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<UCameraComponent> CockpitCamera;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")
 	TObjectPtr<UAudioComponent> EngineAudio;
@@ -236,6 +260,36 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
 	float LookSensitivity = 1.f;
 
+	// ---- Cockpit ----------------------------------------------------------------
+
+	/**
+	 * Piloting view. First person by default: the cockpit is the point of the
+	 * aircraft, and the chase camera is the concession, not the other way round.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Cockpit")
+	bool bFirstPerson = true;
+
+	/** Hide the exterior hull while inside it. Off if the model has a real interior. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Cockpit")
+	bool bHideHullInCockpit = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Cockpit")
+	float CockpitFOV = 95.f;
+
+	/** Deliberately a narrow range: a canopy that warps with speed reads as a bug. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Cockpit")
+	float CockpitFOVFast = 103.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Cockpit", meta = (ClampMin = "0", ClampMax = "1"))
+	float CockpitFOVImpulseScale = 0.4f;
+
+	/** How far the pilot may glance either side before the canopy frame stops them. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Cockpit", meta = (ClampMin = "0", ClampMax = "90"))
+	float CockpitMaxLookYaw = 32.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Cockpit", meta = (ClampMin = "0", ClampMax = "90"))
+	float CockpitMaxLookPitch = 18.f;
+
 	/** Degrees per second at full stick deflection. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
 	float StickLookRate = 140.f;
@@ -300,6 +354,7 @@ private:
 
 	/** Speed-driven FOV, before the feedback impulse is added on top. */
 	float SmoothedFOV = 0.f;
+	float SmoothedCockpitFOV = 0.f;
 
 	/** Chase boom free-look, relative to the craft's own heading. */
 	float LookYawOffset = 0.f;
