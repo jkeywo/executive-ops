@@ -100,12 +100,30 @@ void AEOPlayerController::BeginPlay()
 
 void AEOPlayerController::TakeDebugScreenshot()
 {
+	// -EOScreenshotCockpit captures from the first-person seat, which is the only
+	// way to check that a cockpit interior is facing the right way.
+	if (FParse::Param(FCommandLine::Get(), TEXT("EOScreenshotCockpit")))
+	{
+		if (AEOAircraftPawn* Craft = Cast<AEOAircraftPawn>(GetPawn()))
+		{
+			Craft->SetFirstPerson(true);
+		}
+	}
+
 	// -EOScreenshotOrbit=<yaw> views the possessed pawn from a bearing instead of
 	// down the chase camera, which always sits behind and so can never show
 	// whether a model is facing the right way.
 	float OrbitYaw = 0.f;
 	if (FParse::Value(FCommandLine::Get(), TEXT("EOScreenshotOrbit="), OrbitYaw))
 	{
+		// An orbit shot exists to look at the exterior, and the aircraft boots
+		// into the cockpit with the hull hidden - so leave first person first,
+		// or the shot shows an interior floating in mid-air.
+		if (AEOAircraftPawn* Craft = Cast<AEOAircraftPawn>(GetPawn()))
+		{
+			Craft->SetFirstPerson(false);
+		}
+
 		if (APawn* Subject = GetPawn())
 		{
 			float OrbitDistance = 1600.f;

@@ -905,7 +905,28 @@ void UEOSelfTest::Step()
 		if (bOnTarget || PhaseElapsed > 3.f)
 		{
 			Check(bOnTarget, TEXT("the crosshair can be put on the guard"));
-			Advance(EPhase::GuardGunFire, 0.1f);
+
+			// Fire on this exact step. The follow camera has positional lag and
+			// is still easing after the teleport, so waiting even a tenth of a
+			// second lets the crosshair slide off the guard again.
+			if (Guard->GetHealth())
+			{
+				const float GuardStart = Guard->GetHealth()->GetHealth();
+
+				Check(Op->FireWeapon(), TEXT("the weapon fires"));
+				Check(Guard->GetHealth()->GetHealth() < GuardStart,
+					FString::Printf(TEXT("a real shot damages the guard (%.0f -> %.0f)"),
+						GuardStart, Guard->GetHealth()->GetHealth()));
+				Check(!Guard->IsDead(), TEXT("one pistol hit does not kill"));
+
+				Guard->GetHealth()->ApplyDamage(55.f, Op);
+				Check(Guard->IsDead(), TEXT("two pistol hits kill the guard"));
+				Check(Guard->GetHealth()->ApplyDamage(55.f, Op) == 0.f,
+					TEXT("a corpse takes no further damage"));
+			}
+
+			ResetEncounter();
+			Advance(EPhase::GuardLosesPlayer, 0.5f);
 			break;
 		}
 
@@ -917,36 +938,11 @@ void UEOSelfTest::Step()
 	}
 
 	case EPhase::GuardGunFire:
-	{
-		AEOGuardCharacter* Guard = GetGuard();
-		AEOOperativeCharacter* Op = GetOperative();
-		if (!Guard || !Op || !Guard->GetHealth())
-		{
-			Advance(EPhase::Done, 0.f);
-			break;
-		}
-
-		const float GuardStart = Guard->GetHealth()->GetHealth();
-
-		// Fire the actual weapon, so the trace channel and the damage path are
-		// both exercised rather than assumed.
-		Check(Op->FireWeapon(), TEXT("the weapon fires"));
-		Check(Guard->GetHealth()->GetHealth() < GuardStart,
-			FString::Printf(TEXT("a real shot damages the guard (%.0f -> %.0f)"),
-				GuardStart, Guard->GetHealth()->GetHealth()));
-		Check(!Guard->IsDead(), TEXT("one pistol hit does not kill"));
-
-		Guard->GetHealth()->ApplyDamage(55.f, Op);
-		Check(Guard->IsDead(), TEXT("two pistol hits kill the guard"));
-		Check(Guard->GetHealth()->ApplyDamage(55.f, Op) == 0.f,
-			TEXT("a corpse takes no further damage"));
-
-		ResetEncounter();
-		Advance(EPhase::GuardLosesPlayer, 0.5f);
+		// Folded into GuardGunAim, which fires the moment the crosshair is on
+		// target rather than a phase later.
+		Advance(EPhase::GuardLosesPlayer, 0.f);
 		break;
-	}
 
-	// ---- Outcome 5: break contact ---------------------------------------------
 	case EPhase::GuardLosesPlayer:
 	{
 		AEOGuardCharacter* Guard = GetGuard();

@@ -30,6 +30,17 @@ BP_AIRCRAFT = "/Game/Blueprints/BP_Aircraft"
 # it.
 TARGET_LENGTH = 200.0
 
+# Which way a Tripo export faces cannot be derived from its bounds - the
+# heuristic that used to live here ("longest axis is forward") guessed wrong for
+# the cockpit, and put the player looking out of the right-hand window. These
+# values were each established by rendering the model and looking at it, and
+# should only be changed the same way.
+#
+# Verified by rendering the first-person view at each quadrant: at 90 the canopy
+# frames are symmetric, the instrument console is dead ahead, and the forward
+# view is through the middle. The old heuristic produced a side-on view.
+MODEL_YAW = 90.0
+
 # Where the tub sits inside the hull: forward of centre, and up to the height a
 # seated pilot's eyeline would actually be.
 COCKPIT_FORWARD = 150.0
@@ -45,7 +56,7 @@ EYE_FORWARD = 5.0
 EYE_UP = 94.0
 
 
-def wire_to_aircraft(mesh, surface, scale, axis):
+def wire_to_aircraft(mesh, surface, scale):
     blueprint = unreal.load_asset(BP_AIRCRAFT)
     if not blueprint:
         raise RuntimeError("BP_Aircraft not found; run m0_setup.py first")
@@ -60,12 +71,8 @@ def wire_to_aircraft(mesh, surface, scale, axis):
     cockpit.set_editor_property("static_mesh", mesh)
     cockpit.set_editor_property("relative_scale3d", unreal.Vector(scale, scale, scale))
 
-    # Turn the model so its long axis points down +X, which is forward for every
-    # pawn in this project. Tripo exports are not authored to any particular
-    # forward.
-    yaw = -90.0 if axis == "Y" else 0.0
     cockpit.set_editor_property("relative_rotation",
-                                unreal.Rotator(roll=0.0, pitch=0.0, yaw=yaw))
+                                unreal.Rotator(roll=0.0, pitch=0.0, yaw=MODEL_YAW))
 
     if surface:
         cockpit.set_material(0, surface)
@@ -77,7 +84,7 @@ def wire_to_aircraft(mesh, surface, scale, axis):
     unreal.BlueprintEditorLibrary.compile_blueprint(blueprint)
     eo.EAL.save_loaded_asset(blueprint)
 
-    eo.log(TAG, "wired onto BP_Aircraft (yaw {:.0f}, scale {:.4f})".format(yaw, scale))
+    eo.log(TAG, "wired onto BP_Aircraft (yaw {:.0f}, scale {:.4f})".format(MODEL_YAW, scale))
     eo.log(TAG, "seat and eyeline are tunable on the Blueprint: CockpitPivot and "
                 "CockpitCamera relative locations")
 
@@ -85,10 +92,10 @@ def wire_to_aircraft(mesh, surface, scale, axis):
 def main():
     eo.log(TAG, "importing cockpit")
 
-    mesh, surface, scale, _size, axis = eo.import_model(
+    mesh, surface, scale, _size, _axis = eo.import_model(
         "PlayerCockpit", DEST, "PlayerCockpit", TAG, TARGET_LENGTH)
 
-    wire_to_aircraft(mesh, surface, scale, axis)
+    wire_to_aircraft(mesh, surface, scale)
     eo.log(TAG, "done")
 
 

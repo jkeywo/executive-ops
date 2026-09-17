@@ -29,8 +29,18 @@ BP_AIRCRAFT = "/Game/Blueprints/BP_Aircraft"
 # 800 x 600 x 240cm. Fitting to the longest axis keeps the proportions honest.
 TARGET_LENGTH = 800.0
 
+# Which way a Tripo export faces cannot be derived from its bounds - the
+# heuristic that used to live here ("longest axis is forward") guessed wrong for
+# the cockpit, and put the player looking out of the right-hand window. These
+# values were each established by rendering the model and looking at it, and
+# should only be changed the same way.
+#
+# Verified from a side-on capture: the nose points down +X, matching every pawn
+# in the project.
+MODEL_YAW = -90.0
 
-def wire_to_aircraft(mesh, surface, scale, size, axis):
+
+def wire_to_aircraft(mesh, surface, scale, size):
     blueprint = unreal.load_asset(BP_AIRCRAFT)
     if not blueprint:
         raise RuntimeError("BP_Aircraft not found; run m0_setup.py first")
@@ -41,12 +51,8 @@ def wire_to_aircraft(mesh, surface, scale, size, axis):
     hull.set_editor_property("static_mesh", mesh)
     hull.set_editor_property("relative_scale3d", unreal.Vector(scale, scale, scale))
 
-    # Turn the model so its long axis points down +X, which is forward for every
-    # pawn in this project. Tripo exports are not authored to any particular
-    # forward.
-    yaw = -90.0 if axis == "Y" else 0.0
     hull.set_editor_property("relative_rotation",
-                             unreal.Rotator(roll=0.0, pitch=0.0, yaw=yaw))
+                             unreal.Rotator(roll=0.0, pitch=0.0, yaw=MODEL_YAW))
 
     if surface:
         hull.set_material(0, surface)
@@ -65,8 +71,9 @@ def wire_to_aircraft(mesh, surface, scale, size, axis):
     # Deliberately a little tighter than the visual bounds: the twin tails are
     # thin and vertical, and boxing them in would have the player bumping
     # invisible walls well clear of anything they can see.
+    # The yaw above swaps which model axis lies along the pawn's X.
     scaled = [size.x * scale, size.y * scale, size.z * scale]
-    if axis == "Y":
+    if abs(MODEL_YAW) == 90.0:
         scaled[0], scaled[1] = scaled[1], scaled[0]
 
     collision = cdo.get_editor_property("CollisionBox")
@@ -77,16 +84,16 @@ def wire_to_aircraft(mesh, surface, scale, size, axis):
 
     unreal.BlueprintEditorLibrary.compile_blueprint(blueprint)
     eo.EAL.save_loaded_asset(blueprint)
-    eo.log(TAG, "wired onto BP_Aircraft (yaw {:.0f})".format(yaw))
+    eo.log(TAG, "wired onto BP_Aircraft (yaw {:.0f})".format(MODEL_YAW))
 
 
 def main():
     eo.log(TAG, "importing player ship")
 
-    mesh, surface, scale, size, axis = eo.import_model(
+    mesh, surface, scale, size, _axis = eo.import_model(
         "PlayerShip", DEST, "PlayerShip", TAG, TARGET_LENGTH)
 
-    wire_to_aircraft(mesh, surface, scale, size, axis)
+    wire_to_aircraft(mesh, surface, scale, size)
     eo.log(TAG, "done")
 
 
