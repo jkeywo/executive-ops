@@ -34,9 +34,9 @@ Three consequences worth knowing:
 
 | File | Role |
 |---|---|
-| `Feedback/EOFeedbackEvents.h` | Every event name the game fires |
+| `Feedback/EOFeedbackEvents.h` | Every event the game fires, as a native gameplay tag |
 | `Feedback/EOFeedbackTypes.h` | `FEOFeedbackPreset` — the layers one event may use |
-| `Feedback/EOFeedbackPresetSet.h` | The data asset: event name → preset |
+| `Feedback/EOFeedbackPresetSet.h` | The data asset: event tag → preset |
 | `Feedback/EOFeedbackSubsystem.h` | Dispatch, scaling, transient screen state |
 | `Feedback/EOFeedbackSettings.h` | Preset set reference + accessibility scalars |
 | `Feedback/EOCameraShakes.h` | Seven tuned impulse shakes |

@@ -1,48 +1,53 @@
 #include "Feedback/EOFeedbackEvents.h"
 
+/**
+ * Tag strings are the authority the preset asset keys off, so they are not free
+ * to rename: Scripts/m8_build_feedback_presets.py writes the same strings, and a
+ * mismatch shows up as silence rather than as an error.
+ */
 namespace EOFeedbackEvents
 {
-	const FName Aircraft_Accelerate(TEXT("Aircraft_Accelerate"));
-	const FName Aircraft_BrakeHard(TEXT("Aircraft_BrakeHard"));
-	const FName Aircraft_LateralBurst(TEXT("Aircraft_LateralBurst"));
-	const FName Aircraft_Collision(TEXT("Aircraft_Collision"));
-	const FName Aircraft_Scrape(TEXT("Aircraft_Scrape"));
+	UE_DEFINE_GAMEPLAY_TAG(Aircraft_Accelerate, "Feedback.Aircraft.Accelerate");
+	UE_DEFINE_GAMEPLAY_TAG(Aircraft_BrakeHard, "Feedback.Aircraft.BrakeHard");
+	UE_DEFINE_GAMEPLAY_TAG(Aircraft_LateralBurst, "Feedback.Aircraft.LateralBurst");
+	UE_DEFINE_GAMEPLAY_TAG(Aircraft_Collision, "Feedback.Aircraft.Collision");
+	UE_DEFINE_GAMEPLAY_TAG(Aircraft_Scrape, "Feedback.Aircraft.Scrape");
 
-	const FName Deploy_Ready(TEXT("Deploy_Ready"));
-	const FName Deploy_Launch(TEXT("Deploy_Launch"));
-	const FName Deploy_Land(TEXT("Deploy_Land"));
+	UE_DEFINE_GAMEPLAY_TAG(Deploy_Ready, "Feedback.Deploy.Ready");
+	UE_DEFINE_GAMEPLAY_TAG(Deploy_Launch, "Feedback.Deploy.Launch");
+	UE_DEFINE_GAMEPLAY_TAG(Deploy_Land, "Feedback.Deploy.Land");
 
-	const FName Parkour_Vault(TEXT("Parkour_Vault"));
-	const FName Parkour_Mantle(TEXT("Parkour_Mantle"));
-	const FName Parkour_Climb(TEXT("Parkour_Climb"));
-	const FName Parkour_Contact(TEXT("Parkour_Contact"));
-	const FName Parkour_Slide(TEXT("Parkour_Slide"));
-	const FName Parkour_SlideEnd(TEXT("Parkour_SlideEnd"));
-	const FName Move_LandLight(TEXT("Move_LandLight"));
-	const FName Move_LandHard(TEXT("Move_LandHard"));
+	UE_DEFINE_GAMEPLAY_TAG(Parkour_Vault, "Feedback.Parkour.Vault");
+	UE_DEFINE_GAMEPLAY_TAG(Parkour_Mantle, "Feedback.Parkour.Mantle");
+	UE_DEFINE_GAMEPLAY_TAG(Parkour_Climb, "Feedback.Parkour.Climb");
+	UE_DEFINE_GAMEPLAY_TAG(Parkour_Contact, "Feedback.Parkour.Contact");
+	UE_DEFINE_GAMEPLAY_TAG(Parkour_Slide, "Feedback.Parkour.Slide");
+	UE_DEFINE_GAMEPLAY_TAG(Parkour_SlideEnd, "Feedback.Parkour.SlideEnd");
+	UE_DEFINE_GAMEPLAY_TAG(Move_LandLight, "Feedback.Move.LandLight");
+	UE_DEFINE_GAMEPLAY_TAG(Move_LandHard, "Feedback.Move.LandHard");
 
-	const FName Takedown_Commit(TEXT("Takedown_Commit"));
-	const FName Takedown_Impact(TEXT("Takedown_Impact"));
+	UE_DEFINE_GAMEPLAY_TAG(Takedown_Commit, "Feedback.Takedown.Commit");
+	UE_DEFINE_GAMEPLAY_TAG(Takedown_Impact, "Feedback.Takedown.Impact");
 
-	const FName Pistol_Fire(TEXT("Pistol_Fire"));
-	const FName Pistol_HitHard(TEXT("Pistol_HitHard"));
-	const FName Pistol_HitMetal(TEXT("Pistol_HitMetal"));
-	const FName Pistol_HitCharacter(TEXT("Pistol_HitCharacter"));
+	UE_DEFINE_GAMEPLAY_TAG(Pistol_Fire, "Feedback.Pistol.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Pistol_HitHard, "Feedback.Pistol.HitHard");
+	UE_DEFINE_GAMEPLAY_TAG(Pistol_HitMetal, "Feedback.Pistol.HitMetal");
+	UE_DEFINE_GAMEPLAY_TAG(Pistol_HitCharacter, "Feedback.Pistol.HitCharacter");
 
-	const FName Guard_Fire(TEXT("Guard_Fire"));
-	const FName Guard_NearMiss(TEXT("Guard_NearMiss"));
-	const FName Player_Damaged(TEXT("Player_Damaged"));
+	UE_DEFINE_GAMEPLAY_TAG(Guard_Fire, "Feedback.Guard.Fire");
+	UE_DEFINE_GAMEPLAY_TAG(Guard_NearMiss, "Feedback.Guard.NearMiss");
+	UE_DEFINE_GAMEPLAY_TAG(Player_Damaged, "Feedback.Player.Damaged");
 
-	const FName Guard_Suspicious(TEXT("Guard_Suspicious"));
-	const FName Guard_DetectConfirmed(TEXT("Guard_DetectConfirmed"));
-	const FName Guard_Searching(TEXT("Guard_Searching"));
-	const FName Guard_LostContact(TEXT("Guard_LostContact"));
-	const FName Guard_Death(TEXT("Guard_Death"));
+	UE_DEFINE_GAMEPLAY_TAG(Guard_Suspicious, "Feedback.Guard.Suspicious");
+	UE_DEFINE_GAMEPLAY_TAG(Guard_DetectConfirmed, "Feedback.Guard.DetectConfirmed");
+	UE_DEFINE_GAMEPLAY_TAG(Guard_Searching, "Feedback.Guard.Searching");
+	UE_DEFINE_GAMEPLAY_TAG(Guard_LostContact, "Feedback.Guard.LostContact");
+	UE_DEFINE_GAMEPLAY_TAG(Guard_Death, "Feedback.Guard.Death");
 
-	const FName Objective_Complete(TEXT("Objective_Complete"));
-	const FName Extraction_Call(TEXT("Extraction_Call"));
-	const FName Extraction_Board(TEXT("Extraction_Board"));
+	UE_DEFINE_GAMEPLAY_TAG(Objective_Complete, "Feedback.Objective.Complete");
+	UE_DEFINE_GAMEPLAY_TAG(Extraction_Call, "Feedback.Extraction.Call");
+	UE_DEFINE_GAMEPLAY_TAG(Extraction_Board, "Feedback.Extraction.Board");
 
-	const FName UI_ActionAvailable(TEXT("UI_ActionAvailable"));
-	const FName UI_ActionUnavailable(TEXT("UI_ActionUnavailable"));
+	UE_DEFINE_GAMEPLAY_TAG(UI_ActionAvailable, "Feedback.UI.ActionAvailable");
+	UE_DEFINE_GAMEPLAY_TAG(UI_ActionUnavailable, "Feedback.UI.ActionUnavailable");
 }

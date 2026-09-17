@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Feedback/EOFeedbackTypes.h"
 #include "EOFeedbackSubsystem.generated.h"
@@ -11,7 +12,7 @@ class UEOFeedbackPresetSet;
 /**
  * One dispatcher for every piece of game feel in the project.
  *
- * Gameplay classes call Play("Pistol_Fire", context) and stop caring. The
+ * Gameplay classes call Play(Pistol_Fire, context) and stop caring. The
  * subsystem owns preset lookup, accessibility scaling, and the transient screen
  * state - FOV impulse, vignette, damage direction - that the camera and HUD read
  * back each frame.
@@ -27,13 +28,13 @@ class EXECUTIVEOPS_API UEOFeedbackSubsystem : public UTickableWorldSubsystem
 
 public:
 	/** Fire an event. Unknown events and missing assets are silent, by design. */
-	void Play(FName Event, const FEOFeedbackContext& Context);
+	void Play(FGameplayTag Event, const FEOFeedbackContext& Context);
 
 	UFUNCTION(BlueprintCallable, Category = "Feedback", meta = (DisplayName = "Play Feedback At Location"))
-	void PlayAtLocation(FName Event, const FVector& Location, float Scale = 1.f);
+	void PlayAtLocation(FGameplayTag Event, const FVector& Location, float Scale = 1.f);
 
 	UFUNCTION(BlueprintCallable, Category = "Feedback", meta = (DisplayName = "Play Feedback At Actor"))
-	void PlayAtActor(FName Event, AActor* Actor, float Scale = 1.f);
+	void PlayAtActor(FGameplayTag Event, AActor* Actor, float Scale = 1.f);
 
 	/** Degrees to add to the current camera FOV. Decays to zero on its own. */
 	UFUNCTION(BlueprintPure, Category = "Feedback")
@@ -55,6 +56,7 @@ public:
 	void ClearScreenState();
 
 	//~ UTickableWorldSubsystem
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 	virtual void Deinitialize() override;
@@ -64,7 +66,22 @@ public:
 	static UEOFeedbackSubsystem* Get(const UObject* WorldContext);
 
 private:
-	const FEOFeedbackPreset* FindPreset(FName Event);
+	const FEOFeedbackPreset* FindPreset(FGameplayTag Event);
+
+	/** Kicks off the preset set load. Everything stays silent until it lands. */
+	void BeginWarmingPresets();
+
+	/** Asks the streamer for every asset the presets reference, in one request. */
+	void WarmPresetAssets();
+
+	/**
+	 * Assets resolve in the background and are read back with Get(), which returns
+	 * null until they land. An event that fires before its asset is resident is
+	 * skipped, exactly as a missing asset pack already is - the alternative is a
+	 * blocking disk load on the frame the player pulls the trigger.
+	 */
+	TSharedPtr<struct FStreamableHandle> PresetSetHandle;
+	TSharedPtr<struct FStreamableHandle> PresetAssetsHandle;
 
 	APlayerController* GetLocalController() const;
 

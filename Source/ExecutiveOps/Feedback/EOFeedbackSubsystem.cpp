@@ -7,6 +7,8 @@
 
 #include "Components/AudioComponent.h"
 #include "Components/DecalComponent.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/ForceFeedbackEffect.h"
@@ -43,6 +45,18 @@ UEOFeedbackSubsystem* UEOFeedbackSubsystem::Get(const UObject* WorldContext)
 void UEOFeedbackSubsystem::Deinitialize()
 {
 	ClearScreenState();
+
+	if (PresetAssetsHandle.IsValid())
+	{
+		PresetAssetsHandle->ReleaseHandle();
+		PresetAssetsHandle.Reset();
+	}
+	if (PresetSetHandle.IsValid())
+	{
+		PresetSetHandle->ReleaseHandle();
+		PresetSetHandle.Reset();
+	}
+
 	LoadedPresets = nullptr;
 	bPresetLoadAttempted = false;
 
@@ -54,28 +68,90 @@ TStatId UEOFeedbackSubsystem::GetStatId() const
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UEOFeedbackSubsystem, STATGROUP_Tickables);
 }
 
-const FEOFeedbackPreset* UEOFeedbackSubsystem::FindPreset(FName Event)
+void UEOFeedbackSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
-	// Loaded once, on the first event of the session. Synchronous is fine: the
-	// set is a few kilobytes of structs, and the referenced assets are soft.
-	if (!bPresetLoadAttempted)
+	Super::Initialize(Collection);
+
+	BeginWarmingPresets();
+}
+
+void UEOFeedbackSubsystem::BeginWarmingPresets()
+{
+	if (bPresetLoadAttempted)
 	{
-		bPresetLoadAttempted = true;
+		return;
+	}
+	bPresetLoadAttempted = true;
 
-		const TSoftObjectPtr<UEOFeedbackPresetSet>& SetRef = UEOFeedbackSettings::Get().PresetSet;
-		if (!SetRef.IsNull())
-		{
-			LoadedPresets = SetRef.LoadSynchronous();
-		}
+	const TSoftObjectPtr<UEOFeedbackPresetSet>& SetRef = UEOFeedbackSettings::Get().PresetSet;
+	if (SetRef.IsNull())
+	{
+		// Expected on a clone without the asset packs. Say so once, then stay quiet.
+		UE_LOG(LogExecutiveOps, Log,
+			TEXT("No feedback preset set configured; game feel will be silent. "
+				 "Run Scripts/import_fab_assets.ps1 then Scripts/m8_build_feedback_presets.py."));
+		return;
+	}
 
-		if (!LoadedPresets)
+	// The set itself is a few kilobytes of structs, but it is still a disk read,
+	// and there is no reason to take it on the game thread when nothing needs it
+	// until the first event fires.
+	PresetSetHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+		SetRef.ToSoftObjectPath(),
+		FStreamableDelegate::CreateWeakLambda(this, [this]()
 		{
-			// Expected on a clone without the asset packs. Say so once, then stay quiet.
-			UE_LOG(LogExecutiveOps, Log,
-				TEXT("No feedback preset set configured; game feel will be silent. "
-					 "Run Scripts/import_fab_assets.ps1 then Scripts/m8_build_feedback_presets.py."));
+			LoadedPresets = UEOFeedbackSettings::Get().PresetSet.Get();
+			if (!LoadedPresets)
+			{
+				UE_LOG(LogExecutiveOps, Log,
+					TEXT("Feedback preset set failed to load; game feel will be silent."));
+				return;
+			}
+
+			WarmPresetAssets();
+		}));
+}
+
+void UEOFeedbackSubsystem::WarmPresetAssets()
+{
+	// Every soft reference in the set, requested once. Roughly 35 events across a
+	// handful of packs - small enough that per-level scoping would be machinery
+	// without a measured problem behind it.
+	TArray<FSoftObjectPath> Paths;
+	Paths.Reserve(LoadedPresets->Presets.Num() * 4);
+
+	for (const TPair<FGameplayTag, FEOFeedbackPreset>& Pair : LoadedPresets->Presets)
+	{
+		const FEOFeedbackPreset& Preset = Pair.Value;
+		for (const FSoftObjectPath& Path : {
+			Preset.Sound.ToSoftObjectPath(),
+			Preset.Effect.ToSoftObjectPath(),
+			Preset.ForceFeedback.ToSoftObjectPath(),
+			Preset.Decal.ToSoftObjectPath() })
+		{
+			if (!Path.IsNull())
+			{
+				Paths.AddUnique(Path);
+			}
 		}
 	}
+
+	if (Paths.IsEmpty())
+	{
+		return;
+	}
+
+	PresetAssetsHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(Paths);
+
+	UE_LOG(LogExecutiveOps, Log, TEXT("Warming %d feedback assets in the background."),
+		Paths.Num());
+}
+
+const FEOFeedbackPreset* UEOFeedbackSubsystem::FindPreset(FGameplayTag Event)
+{
+	// A world that outlives its subsystem's Initialize (PIE reuse, seamless travel)
+	// still gets a warm; the guard inside makes this a no-op once one has started.
+	BeginWarmingPresets();
 
 	return LoadedPresets ? LoadedPresets->Find(Event) : nullptr;
 }
@@ -86,21 +162,21 @@ APlayerController* UEOFeedbackSubsystem::GetLocalController() const
 	return World ? World->GetFirstPlayerController() : nullptr;
 }
 
-void UEOFeedbackSubsystem::PlayAtLocation(FName Event, const FVector& Location, float Scale)
+void UEOFeedbackSubsystem::PlayAtLocation(FGameplayTag Event, const FVector& Location, float Scale)
 {
 	FEOFeedbackContext Context = FEOFeedbackContext::At(Location);
 	Context.Scale = Scale;
 	Play(Event, Context);
 }
 
-void UEOFeedbackSubsystem::PlayAtActor(FName Event, AActor* Actor, float Scale)
+void UEOFeedbackSubsystem::PlayAtActor(FGameplayTag Event, AActor* Actor, float Scale)
 {
 	FEOFeedbackContext Context = FEOFeedbackContext::AtActor(Actor);
 	Context.Scale = Scale;
 	Play(Event, Context);
 }
 
-void UEOFeedbackSubsystem::Play(FName Event, const FEOFeedbackContext& Context)
+void UEOFeedbackSubsystem::Play(FGameplayTag Event, const FEOFeedbackContext& Context)
 {
 	const FEOFeedbackPreset* Preset = FindPreset(Event);
 	if (!Preset)
@@ -126,7 +202,7 @@ void UEOFeedbackSubsystem::Play(FName Event, const FEOFeedbackContext& Context)
 void UEOFeedbackSubsystem::ApplyAudio(const FEOFeedbackPreset& Preset,
 	const FEOFeedbackContext& Context, float Scale)
 {
-	USoundBase* Sound = Preset.Sound.LoadSynchronous();
+	USoundBase* Sound = Preset.Sound.Get();
 	if (!Sound)
 	{
 		return;
@@ -153,7 +229,7 @@ void UEOFeedbackSubsystem::ApplyAudio(const FEOFeedbackPreset& Preset,
 void UEOFeedbackSubsystem::ApplyEffect(const FEOFeedbackPreset& Preset,
 	const FEOFeedbackContext& Context, float Scale)
 {
-	UNiagaraSystem* System = Preset.Effect.LoadSynchronous();
+	UNiagaraSystem* System = Preset.Effect.Get();
 	if (!System)
 	{
 		return;
@@ -263,7 +339,7 @@ void UEOFeedbackSubsystem::ApplyHaptics(const FEOFeedbackPreset& Preset)
 		return;
 	}
 
-	UForceFeedbackEffect* Effect = Preset.ForceFeedback.LoadSynchronous();
+	UForceFeedbackEffect* Effect = Preset.ForceFeedback.Get();
 	if (!Effect)
 	{
 		return;
@@ -278,7 +354,7 @@ void UEOFeedbackSubsystem::ApplyHaptics(const FEOFeedbackPreset& Preset)
 void UEOFeedbackSubsystem::ApplyDecal(const FEOFeedbackPreset& Preset,
 	const FEOFeedbackContext& Context)
 {
-	UMaterialInterface* Material = Preset.Decal.LoadSynchronous();
+	UMaterialInterface* Material = Preset.Decal.Get();
 	if (!Material)
 	{
 		return;

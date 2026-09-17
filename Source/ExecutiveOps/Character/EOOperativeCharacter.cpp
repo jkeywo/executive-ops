@@ -262,7 +262,7 @@ bool AEOOperativeCharacter::TryTakedown()
 	return true;
 }
 
-FName AEOOperativeCharacter::SurfaceEventFor(const FHitResult& Hit, bool bHitCharacter)
+FGameplayTag AEOOperativeCharacter::SurfaceEventFor(const FHitResult& Hit, bool bHitCharacter)
 {
 	if (bHitCharacter)
 	{

@@ -13,6 +13,7 @@ public class ExecutiveOps : ModuleRules
 			"Engine",
 			"InputCore",
 			"EnhancedInput",
+			"GameplayTags",
 			"Niagara",
 			"DeveloperSettings",
 			"ProceduralMeshComponent"

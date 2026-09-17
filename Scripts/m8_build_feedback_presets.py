@@ -387,6 +387,23 @@ def build_presets():
     return presets
 
 
+def event_tag(name):
+    """
+    "Pistol_Fire" -> the Feedback.Pistol.Fire gameplay tag.
+
+    The presets are keyed by tag now, but the readable single-underscore names
+    are kept in this file because they match the C++ symbols in
+    EOFeedbackEvents.h one for one. The tag strings there are the authority; a
+    mismatch here shows up as silence, not as an error, so the two halves of
+    this mapping are deliberately mechanical.
+    """
+    tag = unreal.GameplayTag()
+    # TagName is read-only from Python, so the tag is parsed in rather than
+    # assigned. import_text is the only route the struct exposes.
+    tag.import_text("Feedback.{}".format(name.replace("_", ".", 1)))
+    return tag
+
+
 def main():
     full_path = "{}/{}".format(PACKAGE_PATH, ASSET_NAME)
 
@@ -403,7 +420,9 @@ def main():
         return
 
     presets = build_presets()
-    asset.set_editor_property("presets", presets)
+    asset.set_editor_property("presets", {
+        event_tag(name): value for name, value in presets.items()
+    })
 
     unreal.EditorAssetLibrary.save_asset(full_path)
 

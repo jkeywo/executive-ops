@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "GameplayTagContainer.h"
 #include "Interfaces/EODeployableInterface.h"
 #include "EOOperativeCharacter.generated.h"
 
@@ -72,7 +73,7 @@ protected:
 	void HandleDamaged(float Amount, AActor* DamageInstigator);
 
 	/** Picks the impact preset for what the shot actually hit. */
-	static FName SurfaceEventFor(const FHitResult& Hit, bool bHitCharacter);
+	static FGameplayTag SurfaceEventFor(const FHitResult& Hit, bool bHitCharacter);
 
 	void TickCombat(float DeltaSeconds);
 
