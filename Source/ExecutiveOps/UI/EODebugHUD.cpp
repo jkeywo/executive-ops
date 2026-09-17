@@ -3,6 +3,7 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Core/EOPlayerController.h"
+#include "Aircraft/EOAircraftPawn.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Mission/EOMissionSubsystem.h"
 
@@ -41,7 +42,7 @@ void AEODebugHUD::DrawHUD()
 
 	float Y = DebugTopMargin;
 
-	DrawLine(TEXT("EXECUTIVE OPS — M0 SKELETON"), Y, FLinearColor(0.2f, 0.9f, 1.f));
+	DrawLine(TEXT("EXECUTIVE OPS"), Y, FLinearColor(0.2f, 0.9f, 1.f));
 
 	const FString ModeName =
 		StaticEnum<EEOControlMode>()->GetNameStringByValue(static_cast<int64>(EOController->GetControlMode()));
@@ -59,9 +60,21 @@ void AEODebugHUD::DrawHUD()
 		const bool bHover = IEOAircraftControlInterface::Execute_IsHovering(Pawn);
 		const bool bReady = IEOAircraftControlInterface::Execute_IsReadyForDeployment(Pawn);
 
-		// cm/s -> km/h, which is the number that will actually mean something in M1.
+		// cm/s -> km/h, the number that actually means something while flying.
 		DrawLine(FString::Printf(TEXT("Speed:    %.0f km/h"), Speed * 0.036f), Y);
-		DrawLine(FString::Printf(TEXT("Hover:    %s"), bHover ? TEXT("ON") : TEXT("off")), Y);
+
+		if (const AEOAircraftPawn* Craft = Cast<AEOAircraftPawn>(Pawn))
+		{
+			// A bar, because the hover transition is a blend and a boolean hides that.
+			const int32 Filled = FMath::RoundToInt(Craft->GetHoverBlend() * 10.f);
+			const FString Bar = FString::ChrN(Filled, TEXT('=')) + FString::ChrN(10 - Filled, TEXT('.'));
+			DrawLine(FString::Printf(TEXT("Hover:    [%s] %s"), *Bar, bHover ? TEXT("HELD") : TEXT("")), Y);
+			DrawLine(FString::Printf(TEXT("Thrust:   %.0f%%"), Craft->GetThrustAlpha() * 100.f), Y);
+		}
+		else
+		{
+			DrawLine(FString::Printf(TEXT("Hover:    %s"), bHover ? TEXT("ON") : TEXT("off")), Y);
+		}
 		DrawLine(FString::Printf(TEXT("Deploy:   %s"), bReady ? TEXT("READY [F]") : TEXT("hold Shift to hover")), Y,
 			bReady ? FLinearColor::Green : FLinearColor(0.6f, 0.6f, 0.6f));
 	}

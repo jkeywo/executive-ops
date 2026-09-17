@@ -35,6 +35,8 @@ void AEOPlayerController::BeginPlay()
 	// Boot into whichever pawn the map actually provides, preferring the aircraft.
 	if (ResolveAircraft())
 	{
+		// Resolve the operative up front so it can be stowed out of the way.
+		ResolveOperative();
 		PossessAircraft();
 	}
 	else if (ResolveOperative())
@@ -56,12 +58,9 @@ void AEOPlayerController::BeginPlay()
 
 void AEOPlayerController::RunSelfTest()
 {
-	const bool bPassed = UEOSelfTest::Run(this);
-
-	if (UEOSelfTest::ShouldExitAfterRun())
-	{
-		FPlatformMisc::RequestExitWithStatus(/*bForce=*/false, bPassed ? 0 : 1);
-	}
+	// The test object owns its own phase timer and reports its own result.
+	SelfTest = NewObject<UEOSelfTest>(this, TEXT("EOSelfTest"));
+	SelfTest->Start(this);
 }
 
 AEOAircraftPawn* AEOPlayerController::ResolveAircraft()
@@ -172,6 +171,13 @@ bool AEOPlayerController::PossessAircraft()
 	}
 
 	Possess(Aircraft);
+
+	// The operative rides along invisibly rather than standing in the world.
+	if (Operative)
+	{
+		IEODeployableInterface::Execute_SetStowed(Operative, true);
+	}
+
 	ControlMode = EEOControlMode::Aircraft;
 	ApplyMappingContext(ControlMode);
 	UE_LOG(LogExecutiveOps, Log, TEXT("Control mode: Aircraft."));

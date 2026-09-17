@@ -29,6 +29,7 @@ public:
 	virtual void OnDeployFrom_Implementation(AActor* SourceAircraft, const FTransform& DeploySocket) override;
 	virtual void OnDeployComplete_Implementation() override;
 	virtual void OnExtractBegin_Implementation(AActor* TargetAircraft) override;
+	virtual void SetStowed_Implementation(bool bStowed) override;
 	//~ End IEODeployableInterface
 
 protected:
@@ -55,6 +56,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
 	float LookSensitivity = 1.f;
 
+	UFUNCTION(BlueprintPure, Category = "Deployment")
+	bool IsStowed() const { return bStowed; }
+
 private:
 	const UEOInputConfig* GetInputConfig() const;
+
+	bool bStowed = false;
 };

@@ -96,8 +96,27 @@ void AEOOperativeCharacter::Input_SprintStop(const FInputActionValue& Value)
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }
 
+void AEOOperativeCharacter::SetStowed_Implementation(bool bInStowed)
+{
+	bStowed = bInStowed;
+
+	SetActorHiddenInGame(bStowed);
+	SetActorEnableCollision(!bStowed);
+	SetActorTickEnabled(!bStowed);
+
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+		// Gravity would drag a stowed operative through the floor while it waits.
+		Movement->SetMovementMode(bStowed ? MOVE_None : MOVE_Walking);
+	}
+}
+
 void AEOOperativeCharacter::OnDeployFrom_Implementation(AActor* SourceAircraft, const FTransform& DeploySocket)
 {
+	// Must come out of stow before being placed, or it would land with no collision.
+	Execute_SetStowed(this, false);
+
 	// M0: teleport to the socket. M3 replaces this with the launch/drop sequence.
 	SetActorLocationAndRotation(DeploySocket.GetLocation(), DeploySocket.GetRotation());
 	UE_LOG(LogExecutiveOps, Log, TEXT("Operative deployed from %s."), *GetNameSafe(SourceAircraft));

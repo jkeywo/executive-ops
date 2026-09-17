@@ -30,4 +30,13 @@ public:
 	/** Called when the extraction pickup begins, before returning to aircraft control. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Deployment")
 	void OnExtractBegin(AActor* TargetAircraft);
+
+	/**
+	 * Stow the operative while it is aboard the aircraft: hidden, no collision, no
+	 * tick. An unstowed operative parked at the player start would otherwise block
+	 * the aircraft it is supposed to be riding in, and would fall through the world
+	 * during flight.
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Deployment")
+	void SetStowed(bool bStowed);
 };

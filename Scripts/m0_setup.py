@@ -75,6 +75,14 @@ def create_blueprints():
         if mat:
             hull.set_material(0, mat)
 
+        # Thrusters are plain cubes that swell with engine load - a readable
+        # greybox stand-in for exhaust VFX, needing no particle asset.
+        for name in ("ThrusterLeft", "ThrusterRight"):
+            thruster = cdo.get_editor_property(name)
+            thruster.set_editor_property("static_mesh", cube)
+            if mat:
+                thruster.set_material(0, mat)
+
     def cfg_operative(cdo):
         # ACharacter's skeletal mesh component is the UPROPERTY named "Mesh".
         mesh = cdo.get_editor_property("Mesh")

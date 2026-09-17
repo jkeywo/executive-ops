@@ -8,6 +8,7 @@
 class AEOAircraftPawn;
 class AEOOperativeCharacter;
 class UEOInputConfig;
+class UEOSelfTest;
 
 /**
  * Owns the player's relationship with the two halves of the game: which pawn is
@@ -81,6 +82,9 @@ protected:
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<UEOInputConfig> InputConfig;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UEOSelfTest> SelfTest;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AEOAircraftPawn> Aircraft;
