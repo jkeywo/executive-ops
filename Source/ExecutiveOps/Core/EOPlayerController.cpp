@@ -17,6 +17,8 @@
 #include "Mission/EOMissionSite.h"
 #include "Mission/EOObjectiveTerminal.h"
 #include "TimerManager.h"
+#include "UnrealClient.h"
+#include "Camera/CameraActor.h"
 #include "Mission/EOMissionSubsystem.h"
 
 AEOPlayerController::AEOPlayerController()
@@ -62,12 +64,74 @@ void AEOPlayerController::BeginPlay()
 			this, &AEOPlayerController::HandleMissionStateChanged);
 	}
 
+	if (FParse::Param(FCommandLine::Get(), TEXT("EOScreenshot")))
+	{
+		float Delay = 4.f;
+		FParse::Value(FCommandLine::Get(), TEXT("EOScreenshotDelay="), Delay);
+
+		FTimerHandle ShotTimer;
+		GetWorldTimerManager().SetTimer(
+			ShotTimer, this, &AEOPlayerController::TakeDebugScreenshot, Delay, false);
+	}
+
 	if (UEOSelfTest::IsRequested())
 	{
 		// Deferred a tick: the transitions need a fully possessed pawn.
 		FTimerHandle Handle;
 		GetWorldTimerManager().SetTimer(Handle, this, &AEOPlayerController::RunSelfTest, 0.5f, false);
 	}
+}
+
+void AEOPlayerController::TakeDebugScreenshot()
+{
+	// -EOScreenshotOrbit=<yaw> views the possessed pawn from a bearing instead of
+	// down the chase camera, which always sits behind and so can never show
+	// whether a model is facing the right way.
+	float OrbitYaw = 0.f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("EOScreenshotOrbit="), OrbitYaw))
+	{
+		if (APawn* Subject = GetPawn())
+		{
+			float OrbitDistance = 1600.f;
+			FParse::Value(FCommandLine::Get(), TEXT("EOScreenshotDistance="), OrbitDistance);
+
+			float OrbitPitch = -10.f;
+			FParse::Value(FCommandLine::Get(), TEXT("EOScreenshotPitch="), OrbitPitch);
+
+			// Bearing is relative to the pawn's own facing, so 90 is always its
+			// left side whichever way it happens to be pointing.
+			const FRotator Bearing(0.f, Subject->GetActorRotation().Yaw + OrbitYaw, 0.f);
+			const FVector Offset = Bearing.Vector() * OrbitDistance + FVector(0.f, 0.f, 250.f);
+			const FVector ViewLocation = Subject->GetActorLocation() + Offset;
+
+			if (ACameraActor* ViewCamera = GetWorld()->SpawnActor<ACameraActor>(
+				ViewLocation, (Subject->GetActorLocation() - ViewLocation).Rotation()))
+			{
+				ViewCamera->SetActorRotation(
+					FRotator(OrbitPitch, (Subject->GetActorLocation() - ViewLocation).Rotation().Yaw, 0.f));
+				SetViewTarget(ViewCamera);
+			}
+		}
+	}
+
+	// Let the view settle before capturing. Cutting to a new camera and grabbing
+	// the same frame smears the shot with motion blur from the jump.
+	FTimerHandle CaptureTimer;
+	GetWorldTimerManager().SetTimer(
+		CaptureTimer, this, &AEOPlayerController::CaptureDebugScreenshot, 0.75f, false);
+}
+
+void AEOPlayerController::CaptureDebugScreenshot()
+{
+	FScreenshotRequest::RequestScreenshot(TEXT("EOShot"), /*bShowUI=*/true, /*bAddFilenameSuffix=*/false);
+	UE_LOG(LogExecutiveOps, Display, TEXT("Screenshot requested."));
+
+	// Give the request a frame or two to land before tearing the game down.
+	FTimerHandle QuitTimer;
+	GetWorldTimerManager().SetTimer(QuitTimer, FTimerDelegate::CreateLambda([]()
+	{
+		FPlatformMisc::RequestExit(false);
+	}), 2.f, false);
 }
 
 void AEOPlayerController::HandleMissionStateChanged(EEOMissionState OldState, EEOMissionState NewState)

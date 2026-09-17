@@ -127,6 +127,18 @@ protected:
 	/** Entry point for the -EOSelfTest command-line switch. */
 	void RunSelfTest();
 
+	/**
+	 * Grabs a screenshot a few seconds after boot and exits.
+	 *
+	 * Enabled with -EOScreenshot. The self-test suites run with -nullrhi and can
+	 * prove behaviour but never show anything, so this is the only way to check
+	 * that something actually looks right.
+	 */
+	void TakeDebugScreenshot();
+
+	/** Second stage of the screenshot: capture, then exit. */
+	void CaptureDebugScreenshot();
+
 	UFUNCTION()
 	void HandleMissionStateChanged(EEOMissionState OldState, EEOMissionState NewState);
 

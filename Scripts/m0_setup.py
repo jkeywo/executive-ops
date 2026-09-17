@@ -106,6 +106,13 @@ def create_blueprints():
         EAL.save_loaded_asset(bp_asset)
 
     def cfg_aircraft(cdo):
+        # Leave a real imported hull alone. Scripts/import_playership.py owns the
+        # aircraft's appearance once it has run; this is only the greybox
+        # fallback for a project that has not imported the model yet.
+        if EAL.does_asset_exist("/Game/Vehicles/PlayerShip/SM_PlayerShip"):
+            log("player ship present; leaving aircraft visuals alone")
+            return
+
         hull = cdo.get_editor_property("HullMesh")
         hull.set_editor_property("static_mesh", cube)
         hull.set_editor_property("relative_scale3d", unreal.Vector(8.0, 6.0, 2.0))
