@@ -17,6 +17,17 @@ and start refining the verbs (M8).
 ./Scripts/run_selftests.ps1
 ```
 
+Module-level checks run separately, and individually, through Unreal's own
+automation framework - in the editor's Session Frontend, or headless:
+
+```bash
+UnrealEditor-Cmd.exe ExecutiveOps.uproject -ExecCmds="Automation RunTests ExecutiveOps+Quit" -unattended -nullrhi
+```
+
+These do not play the game: the mission checks build a bare world, exercise the
+subsystem through its interface and tear it down, in about a second. See
+`Docs/adr/0007`.
+
 Two suites, because the flight sequence and the ground arena live in different
 maps. 174 checks total, stable across repeated runs.
 

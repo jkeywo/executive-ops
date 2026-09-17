@@ -168,3 +168,40 @@ is the pattern the rest of the module-level checks can follow.
 `AFunctionalTest`, and moving the self-test and cheat manager out of the shipping
 module.
 
+## What was not implemented
+
+Four candidates are wholly or largely untouched. Each has a settled direction
+recorded in `Docs/adr/`, so the decision work is not lost - only the execution
+remains.
+
+**C2b - extract `UEOWeaponComponent`.** The damage half of C2 is done; the weapon
+module is not. The two fire paths are close but not identical: the guard's
+carries near-miss whizz placement that the operative's has no equivalent of, so
+the shared interface has to be designed rather than lifted. Agreed shape:
+`UActorComponent`, `TryFire(muzzle, aimPoint)`, guard as the second caller.
+
+**C3 - one HUD state, two adapters, on UMG.** The largest single job here: 1,184
+lines of Canvas drawing across three `AHUD` classes, plus widget assets, plus
+replacing `EOHudScreenComponent`'s render-target trick with a
+`UWidgetComponent`. Nothing was started, deliberately - a half-migrated HUD is
+worse than either end state, and the gather seam is only worth building once the
+widgets that consume it exist.
+
+**C4 - the rest.** Converting the 143 existing checks, turning the two suites
+into `AFunctionalTest`s, and moving `UEOSelfTest` and `UEOCheatManager` out of the
+shipping module. The last of those is blocked on a dependency inversion, noted
+above.
+
+**C7 - the guard's AI.** Untouched. Perception, StateTree, AIController and
+navmesh together are a rewrite of the one system whose current shape is
+deliberate and documented, inside a milestone defined as adding no features. It
+is the largest scope expansion of the eight and the one I would most want the
+author awake for. `Docs/adr/0005` records the decision to do it and why that
+contradicts the milestone doc.
+
+## Suggested order for the rest
+
+C2b, then C4's conversion, then C3, then C7. C2b is small and its seam is already
+proven by the health component. C4's conversion makes every later change safer to
+verify. C3 and C7 are both asset-authoring jobs and are better done with the
+editor open.
