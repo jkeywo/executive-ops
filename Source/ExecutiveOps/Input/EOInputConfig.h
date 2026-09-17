@@ -29,6 +29,18 @@ public:
 	 */
 	void BuildRuntimeInput();
 
+	/**
+	 * Vertical look direction.
+	 *
+	 * Mouse and stick get separate flags because the two have opposite
+	 * conventions and players routinely want one inverted and not the other.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Input|Look")
+	bool bInvertMouseY = false;
+
+	UPROPERTY(EditAnywhere, Category = "Input|Look")
+	bool bInvertStickY = false;
+
 	/** Aircraft and operative use separate contexts so only one is ever active. */
 	UPROPERTY(VisibleAnywhere, Category = "Input|Contexts")
 	TObjectPtr<UInputMappingContext> AircraftContext;
@@ -39,6 +51,17 @@ public:
 	// Shared
 	UPROPERTY(VisibleAnywhere, Category = "Input|Shared")
 	TObjectPtr<UInputAction> LookAction;
+
+	/**
+	 * Gamepad look, kept separate from the mouse.
+	 *
+	 * A mouse reports a delta that is already frame-independent; a stick reports
+	 * a held position, so it has to be treated as a rate and scaled by delta
+	 * time. Feeding both through one action makes stick look frame-rate
+	 * dependent and wildly too fast.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "Input|Shared")
+	TObjectPtr<UInputAction> LookStickAction;
 
 	// Aircraft (M1 owns the handling; M0 only needs the bindings to exist)
 	UPROPERTY(VisibleAnywhere, Category = "Input|Aircraft")

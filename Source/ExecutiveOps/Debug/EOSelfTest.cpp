@@ -228,9 +228,11 @@ void UEOSelfTest::Step()
 		{
 			// Far from the site: the zone is the blocker, whatever the craft does.
 			IEOAircraftControlInterface::Execute_SetHoverEnabled(Craft, true);
-			Check(Controller->GetDeploymentBlocker() == TEXT("outside the deployment zone"),
-				FString::Printf(TEXT("deployment blocked by distance (got '%s')"),
-					*Controller->GetDeploymentBlocker()));
+			// Asserts the meaning, not the exact wording: the prompt tells the
+			// player to fly to the marker and how far it is.
+			const FString Blocker = Controller->GetDeploymentBlocker();
+			Check(Blocker.Contains(TEXT("marker")),
+				FString::Printf(TEXT("deployment blocked by distance (got '%s')"), *Blocker));
 			Check(!Controller->CanDeploy(), TEXT("cannot deploy from outside the zone"));
 			Check(!Controller->RequestDeployment(), TEXT("deployment request refused outside the zone"));
 

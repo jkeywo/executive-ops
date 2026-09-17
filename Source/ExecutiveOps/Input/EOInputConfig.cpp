@@ -42,6 +42,7 @@ void UEOInputConfig::BuildRuntimeInput()
 	bBuilt = true;
 
 	LookAction           = MakeAction(this, TEXT("IA_Look"),           EInputActionValueType::Axis2D);
+	LookStickAction      = MakeAction(this, TEXT("IA_LookStick"),      EInputActionValueType::Axis2D);
 
 	FlightMoveAction     = MakeAction(this, TEXT("IA_FlightMove"),     EInputActionValueType::Axis2D);
 	FlightVerticalAction = MakeAction(this, TEXT("IA_FlightVertical"), EInputActionValueType::Axis1D);
@@ -88,7 +89,42 @@ void UEOInputConfig::BuildDefaultMappings()
 	AircraftContext->MapKey(DeployAction, EKeys::F);
 	AircraftContext->MapKey(ToggleMapAction, EKeys::M);
 
-	AircraftContext->MapKey(LookAction, EKeys::Mouse2D).Modifiers.Add(MakeNegate(this, false, true, false));
+	// Mouse Y is negated only when the player asks for it. Previously this was
+	// hard-negated, which is what made vertical look feel inverted.
+	{
+		FEnhancedActionKeyMapping& Look = AircraftContext->MapKey(LookAction, EKeys::Mouse2D);
+		if (bInvertMouseY)
+		{
+			Look.Modifiers.Add(MakeNegate(this, false, true, false));
+		}
+	}
+
+	// ---- Gamepad -------------------------------------------------------------
+	// Left stick flies, right stick looks, triggers climb and descend, shoulders
+	// yaw. Deliberately mirrors the keyboard layout rather than inventing a
+	// second control scheme.
+	AircraftContext->MapKey(FlightMoveAction, EKeys::Gamepad_Left2D);
+
+	AircraftContext->MapKey(FlightVerticalAction, EKeys::Gamepad_RightTriggerAxis);
+	AircraftContext->MapKey(FlightVerticalAction, EKeys::Gamepad_LeftTriggerAxis)
+		.Modifiers.Add(MakeNegate(this, true, true, true));
+
+	AircraftContext->MapKey(FlightYawAction, EKeys::Gamepad_RightShoulder);
+	AircraftContext->MapKey(FlightYawAction, EKeys::Gamepad_LeftShoulder)
+		.Modifiers.Add(MakeNegate(this, true, true, true));
+
+	AircraftContext->MapKey(HoverAction, EKeys::Gamepad_FaceButton_Left);
+	AircraftContext->MapKey(DeployAction, EKeys::Gamepad_FaceButton_Bottom);
+	AircraftContext->MapKey(ToggleMapAction, EKeys::Gamepad_FaceButton_Top);
+
+	{
+		FEnhancedActionKeyMapping& Stick =
+			AircraftContext->MapKey(LookStickAction, EKeys::Gamepad_Right2D);
+		if (bInvertStickY)
+		{
+			Stick.Modifiers.Add(MakeNegate(this, false, true, false));
+		}
+	}
 
 	// --- Operative ------------------------------------------------------------
 	OperativeContext->MapKey(MoveAction, EKeys::W).Modifiers.Add(MakeSwizzleYXZ(this));
@@ -114,5 +150,32 @@ void UEOInputConfig::BuildDefaultMappings()
 	OperativeContext->MapKey(AimAction, EKeys::RightMouseButton);
 	OperativeContext->MapKey(InteractAction, EKeys::E);
 
-	OperativeContext->MapKey(LookAction, EKeys::Mouse2D).Modifiers.Add(MakeNegate(this, false, true, false));
+	{
+		FEnhancedActionKeyMapping& Look = OperativeContext->MapKey(LookAction, EKeys::Mouse2D);
+		if (bInvertMouseY)
+		{
+			Look.Modifiers.Add(MakeNegate(this, false, true, false));
+		}
+	}
+
+	// ---- Gamepad -------------------------------------------------------------
+	OperativeContext->MapKey(MoveAction, EKeys::Gamepad_Left2D);
+
+	OperativeContext->MapKey(JumpAction, EKeys::Gamepad_FaceButton_Bottom);
+	OperativeContext->MapKey(SlideAction, EKeys::Gamepad_FaceButton_Right);
+	OperativeContext->MapKey(TakedownAction, EKeys::Gamepad_FaceButton_Top);
+	OperativeContext->MapKey(InteractAction, EKeys::Gamepad_FaceButton_Left);
+	OperativeContext->MapKey(SprintAction, EKeys::Gamepad_LeftThumbstick);
+
+	OperativeContext->MapKey(AimAction, EKeys::Gamepad_LeftTrigger);
+	OperativeContext->MapKey(FireAction, EKeys::Gamepad_RightTrigger);
+
+	{
+		FEnhancedActionKeyMapping& Stick =
+			OperativeContext->MapKey(LookStickAction, EKeys::Gamepad_Right2D);
+		if (bInvertStickY)
+		{
+			Stick.Modifiers.Add(MakeNegate(this, false, true, false));
+		}
+	}
 }

@@ -42,6 +42,22 @@ void AEOPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Pick up the district's mission on boot.
+	//
+	// Selection used to be console-only, which left the player flying a city with
+	// no waypoint, no marker and a deploy key that answered "no mission selected"
+	// forever - there was literally nowhere to go. With one site in the
+	// prototype, having it already selected is also simply the right default;
+	// a selection screen is a later milestone's problem.
+	if (UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())
+	{
+		if (const AEOMissionSite* Site = Mission->SelectDefaultSite())
+		{
+			UE_LOG(LogExecutiveOps, Log, TEXT("Mission available: %s"),
+				*Site->GetDisplayName().ToString());
+		}
+	}
+
 	// Boot into whichever pawn the map actually provides, preferring the aircraft.
 	if (ResolveAircraft())
 	{
@@ -391,12 +407,21 @@ FString AEOPlayerController::GetDeploymentBlocker() const
 
 	if (!Site->IsWithinHoverVolume(Aircraft))
 	{
-		return TEXT("outside the deployment zone");
+		// Say where, not just that it is wrong. "Outside the zone" is no help
+		// when the player cannot tell which way the zone is.
+		const float DistanceM =
+			FVector::Dist(Aircraft->GetActorLocation(), Site->GetHoverPoint()) * 0.01f;
+		return FString::Printf(TEXT("fly to the marker (%.0fm)"), DistanceM);
+	}
+
+	if (!IEOAircraftControlInterface::Execute_IsHovering(Aircraft))
+	{
+		return TEXT("hold hover to steady the craft");
 	}
 
 	if (!IEOAircraftControlInterface::Execute_IsReadyForDeployment(Aircraft))
 	{
-		return TEXT("hold hover and slow down");
+		return TEXT("slow down to deploy");
 	}
 
 	// The mission state machine is the real authority on whether a drop is legal;
