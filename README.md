@@ -5,7 +5,7 @@ Cyberpunk operative prototype — Unreal Engine 5.8.
 Design documents live in [`GDD/`](GDD/). Development follows
 [`GDD/minimal-framework-milestones.md`](GDD/minimal-framework-milestones.md).
 
-**Current milestone: M0 — Project Skeleton.**
+**Current milestone: M8 — Basic Verb Game-Feel Pass.**
 
 ---
 
@@ -30,8 +30,26 @@ Build Tools install includes none of them, so check explicitly:
 4. Build the `ExecutiveOpsEditor` target (Development Editor, Win64).
 5. Open `ExecutiveOps.uproject`.
 
-6. Restore the animation packs (excluded from git, ~1.2 GB):
-   `./Scripts/import_animation_packs.ps1`
+6. Restore the licensed asset packs (excluded from git, several GB):
+
+   ```
+   ./Scripts/import_fab_assets.ps1 -List   # what is present, available, missing
+   ./Scripts/import_fab_assets.ps1
+   ```
+
+   The packs are store-licensed content obtained through your own Epic account;
+   the script copies them out of the Epic launcher's vault cache and, for Lyra
+   and the Niagara Examples, out of a sibling Unreal project. Nothing here is
+   required to build or run — without the packs the game plays silently, because
+   every feedback preset resolves to a missing soft reference.
+
+7. Build the feedback presets from whichever packs are present (editor closed):
+
+   ```
+   UnrealEditor-Cmd.exe ExecutiveOps.uproject -run=pythonscript -script="Scripts/m8_build_feedback_presets.py"
+   ```
+
+   See [`Docs/M8-Feedback.md`](Docs/M8-Feedback.md) for how game feel is wired.
 
 The maps and Blueprints are already built and committed. `Scripts/m0_setup.py` regenerates
 them from scratch if needed:

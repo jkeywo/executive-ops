@@ -10,7 +10,10 @@
 #include "Components/CapsuleComponent.h"
 #include "EnhancedInputComponent.h"
 #include "ExecutiveOps.h"
+#include "Feedback/EOFeedbackEvents.h"
+#include "Feedback/EOFeedbackSubsystem.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Core/EOPlayerController.h"
 #include "Input/EOInputConfig.h"
@@ -73,7 +76,34 @@ void AEOOperativeCharacter::BeginPlay()
 	if (Health)
 	{
 		Health->OnDied.AddDynamic(this, &AEOOperativeCharacter::HandleDied);
+		Health->OnDamaged.AddDynamic(this, &AEOOperativeCharacter::HandleDamaged);
 	}
+}
+
+void AEOOperativeCharacter::HandleDamaged(float Amount, AActor* DamageInstigator)
+{
+	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
+	if (!Feedback || !Health)
+	{
+		return;
+	}
+
+	FEOFeedbackContext Context = FEOFeedbackContext::AtActor(this);
+
+	// The indicator needs somewhere to point. Without a known shooter there is
+	// nothing honest to draw, so the vignette fires alone.
+	if (DamageInstigator)
+	{
+		Context.SourceLocation = DamageInstigator->GetActorLocation();
+		Context.bHasSourceLocation = true;
+	}
+
+	// Scales with how much of the remaining health went: the last hit before death
+	// should read louder than the first, without a separate "critical" event.
+	const float Severity = FMath::Clamp(Amount / FMath::Max(Health->GetMaxHealth() * 0.4f, 1.f), 0.4f, 1.5f);
+	Context.Scale = Severity;
+
+	Feedback->Play(EOFeedbackEvents::Player_Damaged, Context);
 }
 
 // --------------------------------------------------------------------- combat
@@ -132,6 +162,17 @@ bool AEOOperativeCharacter::TryTakedown()
 	const FVector ToVictim = Victim->GetActorLocation() - GetActorLocation();
 	SetActorRotation(FRotator(0.f, ToVictim.Rotation().Yaw, 0.f));
 
+	// Acknowledge the input on the frame it was accepted, before the kill
+	// resolves: the brief's first question is "did the game take my input".
+	if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+	{
+		Feedback->Play(EOFeedbackEvents::Takedown_Commit, FEOFeedbackContext::AtActor(this));
+
+		FEOFeedbackContext Impact = FEOFeedbackContext::AtActor(Victim);
+		Impact.Target = this;
+		Feedback->Play(EOFeedbackEvents::Takedown_Impact, Impact);
+	}
+
 	Victim->Takedown(this);
 
 	TakedownRemaining = TakedownDuration;
@@ -146,6 +187,27 @@ bool AEOOperativeCharacter::TryTakedown()
 
 	UE_LOG(LogExecutiveOps, Log, TEXT("Takedown on %s."), *Victim->GetName());
 	return true;
+}
+
+FName AEOOperativeCharacter::SurfaceEventFor(const FHitResult& Hit, bool bHitCharacter)
+{
+	if (bHitCharacter)
+	{
+		return EOFeedbackEvents::Pistol_HitCharacter;
+	}
+
+	// Physical materials are the right answer and the greybox has none yet, so
+	// this falls back to hard surface rather than guessing. Metal is opt-in: a
+	// surface has to say it is metal to spark.
+	if (const UPhysicalMaterial* PhysMat = Hit.PhysMaterial.Get())
+	{
+		if (PhysMat->GetName().Contains(TEXT("Metal")))
+		{
+			return EOFeedbackEvents::Pistol_HitMetal;
+		}
+	}
+
+	return EOFeedbackEvents::Pistol_HitHard;
 }
 
 bool AEOOperativeCharacter::FireWeapon()
@@ -169,6 +231,8 @@ bool AEOOperativeCharacter::FireWeapon()
 	FireCooldown = WeaponInterval;
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(EOOperativeShot), false, this);
+	// The impact preset is chosen by surface, so the trace has to bring one back.
+	Params.bReturnPhysicalMaterial = true;
 
 	// Two stages: the camera decides WHAT is being aimed at, the body decides
 	// whether the shot can actually get there. Firing straight from the camera
@@ -190,16 +254,35 @@ bool AEOOperativeCharacter::FireWeapon()
 		(AimPoint - Muzzle).GetSafeNormal(),
 		FMath::DegreesToRadians(bAiming ? AimSpread : HipSpread));
 
+	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
+	if (Feedback)
+	{
+		FEOFeedbackContext Shot = FEOFeedbackContext::At(Muzzle);
+		Shot.Rotation = Direction.Rotation();
+		Shot.AttachTo = GetMesh();
+		Feedback->Play(EOFeedbackEvents::Pistol_Fire, Shot);
+	}
+
 	FHitResult Hit;
 	if (World->LineTraceSingleByChannel(Hit, Muzzle, Muzzle + Direction * WeaponRange,
 		ECC_Pawn, Params))
 	{
-		if (AActor* HitActor = Hit.GetActor())
+		AActor* HitActor = Hit.GetActor();
+		UEOHealthComponent* HitHealth = HitActor
+			? HitActor->FindComponentByClass<UEOHealthComponent>()
+			: nullptr;
+
+		if (HitHealth)
 		{
-			if (UEOHealthComponent* HitHealth = HitActor->FindComponentByClass<UEOHealthComponent>())
-			{
-				HitHealth->ApplyDamage(WeaponDamage, this);
-			}
+			HitHealth->ApplyDamage(WeaponDamage, this);
+		}
+
+		if (Feedback)
+		{
+			FEOFeedbackContext Impact = FEOFeedbackContext::At(Hit.ImpactPoint);
+			Impact.Rotation = Hit.ImpactNormal.Rotation();
+			Impact.Target = HitActor;
+			Feedback->Play(SurfaceEventFor(Hit, HitHealth != nullptr), Impact);
 		}
 	}
 
@@ -397,6 +480,13 @@ bool AEOOperativeCharacter::TryStartSlide()
 	Crouch();
 	Movement->Velocity = SlideDirection * SlideSpeed;
 
+	if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+	{
+		FEOFeedbackContext Context = FEOFeedbackContext::AtActor(this);
+		Context.AttachTo = GetRootComponent();
+		Feedback->Play(EOFeedbackEvents::Parkour_Slide, Context);
+	}
+
 	return true;
 }
 
@@ -411,6 +501,11 @@ void AEOOperativeCharacter::StopSlide()
 	SlideElapsed = 0.f;
 	SlideSpeed = 0.f;
 	UnCrouch();
+
+	if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+	{
+		Feedback->Play(EOFeedbackEvents::Parkour_SlideEnd, FEOFeedbackContext::AtActor(this));
+	}
 
 	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
 	{
@@ -552,6 +647,7 @@ void AEOOperativeCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 
 	Input->BindAction(Config->MoveAction, ETriggerEvent::Triggered, this, &AEOOperativeCharacter::Input_Move);
 	Input->BindAction(Config->LookAction, ETriggerEvent::Triggered, this, &AEOOperativeCharacter::Input_Look);
+	Input->BindAction(Config->LookStickAction, ETriggerEvent::Triggered, this, &AEOOperativeCharacter::Input_LookStick);
 	Input->BindAction(Config->JumpAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_Jump);
 	Input->BindAction(Config->JumpAction, ETriggerEvent::Completed, this, &AEOOperativeCharacter::Input_StopJump);
 	Input->BindAction(Config->SprintAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_SprintStart);
@@ -599,6 +695,22 @@ void AEOOperativeCharacter::Input_Look(const FInputActionValue& Value)
 	const FVector2D Axis = Value.Get<FVector2D>();
 	AddControllerYawInput(Axis.X * LookSensitivity);
 	AddControllerPitchInput(Axis.Y * LookSensitivity);
+}
+
+void AEOOperativeCharacter::Input_LookStick(const FInputActionValue& Value)
+{
+	if (bStowed)
+	{
+		return;
+	}
+
+	// A stick is a rate, not a delta: without delta time the view speed scales
+	// with frame rate.
+	const FVector2D Axis = Value.Get<FVector2D>();
+	const float Scale = StickLookRate * GetWorld()->GetDeltaSeconds();
+
+	AddControllerYawInput(Axis.X * Scale);
+	AddControllerPitchInput(Axis.Y * Scale);
 }
 
 void AEOOperativeCharacter::Input_Jump(const FInputActionValue& Value)
@@ -775,13 +887,46 @@ void AEOOperativeCharacter::BeginDeploymentDrop(const FTransform& FromSocket, co
 		Movement->Velocity = LaunchVelocity;
 	}
 
+	if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+	{
+		FEOFeedbackContext Context = FEOFeedbackContext::AtActor(this);
+		Context.AttachTo = GetRootComponent();
+		Feedback->Play(EOFeedbackEvents::Deploy_Launch, Context);
+	}
+
 	GetWorldTimerManager().SetTimer(
 		DropTimeoutTimer, this, &AEOOperativeCharacter::OnDropTimedOut, DropTimeout, false);
 }
 
 void AEOOperativeCharacter::Landed(const FHitResult& Hit)
 {
+	// Read the impact speed before Super runs: the movement component zeroes
+	// vertical velocity as part of landing, and afterwards every landing looks
+	// equally gentle.
+	const float ImpactSpeed = FMath::Abs(GetVelocity().Z);
+
 	Super::Landed(Hit);
+
+	if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+	{
+		FEOFeedbackContext Context = FEOFeedbackContext::At(Hit.ImpactPoint);
+		Context.Rotation = Hit.ImpactNormal.Rotation();
+
+		if (bDeploying)
+		{
+			// The drop's own landing is a signature beat, not a generic one.
+			Feedback->Play(EOFeedbackEvents::Deploy_Land, Context);
+		}
+		else if (ImpactSpeed > HardLandingSpeed)
+		{
+			Context.Scale = FMath::Clamp(ImpactSpeed / (HardLandingSpeed * 2.f), 0.6f, 1.5f);
+			Feedback->Play(EOFeedbackEvents::Move_LandHard, Context);
+		}
+		else if (ImpactSpeed > HardLandingSpeed * 0.35f)
+		{
+			Feedback->Play(EOFeedbackEvents::Move_LandLight, Context);
+		}
+	}
 
 	if (!bDeploying)
 	{

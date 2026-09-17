@@ -78,6 +78,7 @@ protected:
 	void Input_Yaw(const FInputActionValue& Value);
 	void Input_YawReleased(const FInputActionValue& Value);
 	void Input_Look(const FInputActionValue& Value);
+	void Input_LookStick(const FInputActionValue& Value);
 	void Input_HoverStart(const FInputActionValue& Value);
 	void Input_HoverStop(const FInputActionValue& Value);
 	void Input_Deploy(const FInputActionValue& Value);
@@ -98,8 +99,20 @@ protected:
 	/** Thruster scale and engine audio. */
 	void UpdateFeedback(float DeltaSeconds);
 
+	/**
+	 * Watches speed and input for the moments worth a one-shot: a surge, a hard
+	 * brake, a lateral burst. Rate-limited, because these are punctuation.
+	 */
+	void UpdateFlightTransients(float DeltaSeconds);
+
+	/** Turns a swept blocking hit into either a collision or a scrape. */
+	void ReportImpact(const FHitResult& Hit);
+
 	/** Free-look offset on the chase boom, recentring when the player lets go. */
 	void UpdateLook(float DeltaSeconds);
+
+	/** Shared by mouse and stick look, which differ only in how they are scaled. */
+	void ApplyLookDelta(const FVector2D& Delta);
 
 	/** Zero the held control demand. Called whenever possession changes. */
 	void ClearControlDemand();
@@ -223,6 +236,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
 	float LookSensitivity = 1.f;
 
+	/** Degrees per second at full stick deflection. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
+	float StickLookRate = 140.f;
+
 	/** Free-look limits. The boom recentres behind the craft when the mouse stops. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
 	float MaxLookYaw = 75.f;
@@ -274,6 +291,15 @@ private:
 	FVector ScriptedDestination = FVector::ZeroVector;
 	bool bScriptedArrival = false;
 	bool bScriptedArrived = false;
+
+	/** Feedback transient tracking: see UpdateFlightTransients. */
+	float PreviousSpeed = 0.f;
+	float PreviousLateralInput = 0.f;
+	float TransientCooldown = 0.f;
+	float ScrapeCooldown = 0.f;
+
+	/** Speed-driven FOV, before the feedback impulse is added on top. */
+	float SmoothedFOV = 0.f;
 
 	/** Chase boom free-look, relative to the craft's own heading. */
 	float LookYawOffset = 0.f;

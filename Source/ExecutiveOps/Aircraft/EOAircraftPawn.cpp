@@ -6,6 +6,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "ExecutiveOps.h"
+#include "Feedback/EOFeedbackEvents.h"
+#include "Feedback/EOFeedbackSubsystem.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Core/EOPlayerController.h"
 #include "Input/EOInputConfig.h"
@@ -170,6 +172,8 @@ bool AEOAircraftPawn::UpdateScriptedArrival(float DeltaSeconds)
 				// dead, damped per unit time so the penalty does not depend on
 				// frame rate - a per-frame halving stalls the craft completely
 				// at high refresh rates.
+				ReportImpact(Hit);
+
 				Velocity = FVector::VectorPlaneProject(Velocity, Hit.Normal)
 					* FMath::Pow(SlideRetentionPerSecond, DeltaSeconds);
 			}
@@ -274,11 +278,45 @@ void AEOAircraftPawn::UpdateFlight(float DeltaSeconds)
 		return;
 	}
 
+	ReportImpact(Hit);
+
 	// Slide along the surface rather than stopping dead: clipping a building at
 	// speed should cost momentum, not end the flight. Damped per unit time so the
 	// penalty does not depend on frame rate.
 	Velocity = FVector::VectorPlaneProject(Velocity, Hit.Normal)
 		* FMath::Pow(SlideRetentionPerSecond, DeltaSeconds);
+}
+
+void AEOAircraftPawn::ReportImpact(const FHitResult& Hit)
+{
+	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
+	if (!Feedback)
+	{
+		return;
+	}
+
+	// How much of the impact went into the surface rather than along it. A glancing
+	// clip at speed is a scrape; flying into a wall head-on is a collision. Using
+	// the normal component rather than raw speed is what keeps those distinct.
+	const float ClosingSpeed = FMath::Abs(FVector::DotProduct(Velocity, Hit.Normal));
+	const float Severity = FMath::Clamp(ClosingSpeed / FMath::Max(FlightMaxSpeed * 0.35f, 1.f), 0.f, 1.5f);
+
+	FEOFeedbackContext Context = FEOFeedbackContext::At(Hit.ImpactPoint);
+	Context.Rotation = Hit.ImpactNormal.Rotation();
+	Context.Scale = Severity;
+
+	if (Severity >= 0.35f)
+	{
+		Feedback->Play(EOFeedbackEvents::Aircraft_Collision, Context);
+	}
+	else if (ScrapeCooldown <= 0.f)
+	{
+		// Rate-limited: a craft sliding along a wall generates a contact every
+		// frame, and a scrape one-shot per frame is a buzzsaw.
+		ScrapeCooldown = 0.25f;
+		Context.Scale = FMath::Max(Severity, 0.3f);
+		Feedback->Play(EOFeedbackEvents::Aircraft_Scrape, Context);
+	}
 }
 
 void AEOAircraftPawn::UpdateAttitude(float DeltaSeconds)
@@ -333,13 +371,25 @@ void AEOAircraftPawn::UpdateCamera(float DeltaSeconds)
 	CameraBoom->TargetArmLength =
 		FMath::FInterpTo(CameraBoom->TargetArmLength, TargetArm, DeltaSeconds, 3.f);
 
+	// The steady-state FOV eases; the feedback impulse is added on top afterwards
+	// so a braking kick is not smoothed away to nothing before it is visible.
 	const float TargetFOV = FMath::Lerp(CameraFOVBase, CameraFOVFast, SpeedAlpha);
-	ChaseCamera->SetFieldOfView(
-		FMath::FInterpTo(ChaseCamera->FieldOfView, TargetFOV, DeltaSeconds, 3.f));
+	SmoothedFOV = FMath::FInterpTo(SmoothedFOV > 0.f ? SmoothedFOV : TargetFOV, TargetFOV,
+		DeltaSeconds, 3.f);
+
+	float Impulse = 0.f;
+	if (const UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+	{
+		Impulse = Feedback->GetFOVImpulse();
+	}
+
+	ChaseCamera->SetFieldOfView(FMath::Clamp(SmoothedFOV + Impulse, 60.f, 140.f));
 }
 
 void AEOAircraftPawn::UpdateFeedback(float DeltaSeconds)
 {
+	UpdateFlightTransients(DeltaSeconds);
+
 	// Thrusters swell with engine load. Crude, but it is a readable greybox signal
 	// for "the engines are working" without needing a particle asset.
 	const float Scale = FMath::Lerp(0.5f, 1.4f, ThrustAlpha);
@@ -358,6 +408,62 @@ void AEOAircraftPawn::UpdateFeedback(float DeltaSeconds)
 		EngineAudio->SetPitchMultiplier(
 			FMath::Lerp(EnginePitchIdle, EnginePitchMax, FMath::Max(ThrustAlpha, GetSpeedAlpha())));
 	}
+}
+
+void AEOAircraftPawn::UpdateFlightTransients(float DeltaSeconds)
+{
+	if (DeltaSeconds <= 0.f)
+	{
+		return;
+	}
+
+	ScrapeCooldown = FMath::Max(0.f, ScrapeCooldown - DeltaSeconds);
+	TransientCooldown = FMath::Max(0.f, TransientCooldown - DeltaSeconds);
+
+	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
+	if (!Feedback)
+	{
+		PreviousSpeed = Velocity.Size();
+		return;
+	}
+
+	const float Speed = Velocity.Size();
+	const float Along = (Speed - PreviousSpeed) / DeltaSeconds;
+	PreviousSpeed = Speed;
+
+	// One-shots fire on the rate of change, not on the input: the craft carries
+	// momentum, so "the player pressed forward" and "the craft actually surged"
+	// are different moments, and only the second one is worth hearing.
+	if (TransientCooldown <= 0.f)
+	{
+		const float SurgeThreshold = FlightAcceleration * 0.75f;
+		const float BrakeThreshold = -FlightBraking * 0.9f;
+
+		FEOFeedbackContext Context = FEOFeedbackContext::AtActor(this);
+		Context.AttachTo = HullPivot;
+
+		if (Along > SurgeThreshold && GetSpeedAlpha() > 0.25f)
+		{
+			Context.Scale = FMath::Clamp(Along / FMath::Max(FlightAcceleration, 1.f), 0.5f, 1.5f);
+			Feedback->Play(EOFeedbackEvents::Aircraft_Accelerate, Context);
+			TransientCooldown = 0.9f;
+		}
+		else if (Along < BrakeThreshold && PreviousSpeed > FlightMaxSpeed * 0.2f)
+		{
+			Context.Scale = FMath::Clamp(-Along / FMath::Max(FlightBraking, 1.f), 0.5f, 1.5f);
+			Feedback->Play(EOFeedbackEvents::Aircraft_BrakeHard, Context);
+			TransientCooldown = 0.7f;
+		}
+		else if (FMath::Abs(MoveInput.Y) > 0.5f && FMath::Abs(PreviousLateralInput) < 0.2f)
+		{
+			// Strafe started from neutral: the lateral thrusters just fired.
+			Context.Scale = 1.f;
+			Feedback->Play(EOFeedbackEvents::Aircraft_LateralBurst, Context);
+			TransientCooldown = 0.5f;
+		}
+	}
+
+	PreviousLateralInput = MoveInput.Y;
 }
 
 void AEOAircraftPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -381,6 +487,7 @@ void AEOAircraftPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	Input->BindAction(Config->FlightYawAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_YawReleased);
 
 	Input->BindAction(Config->LookAction, ETriggerEvent::Triggered, this, &AEOAircraftPawn::Input_Look);
+	Input->BindAction(Config->LookStickAction, ETriggerEvent::Triggered, this, &AEOAircraftPawn::Input_LookStick);
 	Input->BindAction(Config->HoverAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_HoverStart);
 	Input->BindAction(Config->HoverAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_HoverStop);
 	Input->BindAction(Config->DeployAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_Deploy);
@@ -428,10 +535,28 @@ void AEOAircraftPawn::Input_Look(const FInputActionValue& Value)
 		return;
 	}
 
+	ApplyLookDelta(Axis * LookSensitivity);
+}
+
+void AEOAircraftPawn::Input_LookStick(const FInputActionValue& Value)
+{
+	const FVector2D Axis = Value.Get<FVector2D>();
+	if (Axis.IsNearlyZero())
+	{
+		return;
+	}
+
+	// A stick reports a held position, so it is a rate: scale by delta time or
+	// the camera whips round faster the better the frame rate.
+	ApplyLookDelta(Axis * StickLookRate * GetWorld()->GetDeltaSeconds());
+}
+
+void AEOAircraftPawn::ApplyLookDelta(const FVector2D& Delta)
+{
 	// Free-look is a bounded offset on the boom rather than controller rotation,
 	// because the controller must not be allowed to rotate the hull.
-	LookYawOffset = FMath::Clamp(LookYawOffset + Axis.X * LookSensitivity, -MaxLookYaw, MaxLookYaw);
-	LookPitchOffset = FMath::Clamp(LookPitchOffset + Axis.Y * LookSensitivity, -MaxLookPitch, MaxLookPitch);
+	LookYawOffset = FMath::Clamp(LookYawOffset + Delta.X, -MaxLookYaw, MaxLookYaw);
+	LookPitchOffset = FMath::Clamp(LookPitchOffset + Delta.Y, -MaxLookPitch, MaxLookPitch);
 	bLookActiveThisFrame = true;
 }
 

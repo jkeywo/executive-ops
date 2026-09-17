@@ -78,7 +78,7 @@ Per "do not build generalized frameworks beyond what the next milestones use":
 ## Known gaps
 
 - **The animation packs are not in source control** (~1.2 GB, which would exceed
-  GitHub's free Git LFS quota). Restore them with `Scripts/import_animation_packs.ps1`.
+  GitHub's free Git LFS quota). Restore them with `Scripts/import_fab_assets.ps1`.
   Until then `BP_Operative` has no skeletal mesh and the operative is invisible.
 - **The operative has no animation blueprint.** The mannequin is assigned but will
   T-pose. Locomotion is M4's job; M0 only required the packs be present.

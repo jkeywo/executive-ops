@@ -114,6 +114,9 @@ protected:
 	void DrawChargeSlot(const FEOHUDLayout& L, const FEOHUDState& S);
 	void DrawCommitSlot(const FEOHUDLayout& L, const FEOHUDState& S);
 
+	/** Damage vignette and directional indicator, driven by the feedback subsystem. */
+	void DrawScreenFeedback(const FEOHUDLayout& L, const FEOHUDState& S);
+
 	// ---- Drawing primitives ----------------------------------------------------
 
 	/** Panel ground plus hairline border, with an optional accent edge on the left. */

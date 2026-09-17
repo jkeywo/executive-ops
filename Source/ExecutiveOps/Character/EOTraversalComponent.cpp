@@ -5,6 +5,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "ExecutiveOps.h"
+#include "Feedback/EOFeedbackEvents.h"
+#include "Feedback/EOFeedbackSubsystem.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -378,6 +380,28 @@ void UEOTraversalComponent::Begin(const FEOTraversalQuery& Query)
 	if (AEOOperativeCharacter* Operative = Cast<AEOOperativeCharacter>(Character))
 	{
 		Operative->StopSlide();
+	}
+
+	// Commitment is the phase the player most needs confirmed - the approach is
+	// theirs, the contact is the animation's, but the moment the system accepted
+	// the press is only knowable if something says so.
+	if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+	{
+		FEOFeedbackContext Context = FEOFeedbackContext::AtActor(Character);
+		Context.AttachTo = Character->GetRootComponent();
+
+		switch (Query.Type)
+		{
+		case EEOTraversalType::Vault:	Feedback->Play(EOFeedbackEvents::Parkour_Vault, Context); break;
+		case EEOTraversalType::Mantle:	Feedback->Play(EOFeedbackEvents::Parkour_Mantle, Context); break;
+		case EEOTraversalType::Climb:	Feedback->Play(EOFeedbackEvents::Parkour_Climb, Context); break;
+		default: break;
+		}
+
+		// Hand or foot meeting the obstacle, at the obstacle rather than at the
+		// character: the sound belongs to the surface being touched.
+		FEOFeedbackContext Contact = FEOFeedbackContext::At(Query.ApexLocation);
+		Feedback->Play(EOFeedbackEvents::Parkour_Contact, Contact);
 	}
 
 	ActiveQuery = Query;

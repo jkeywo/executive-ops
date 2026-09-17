@@ -47,10 +47,11 @@ completed twice with a reset in between.
 - **No animation blueprint.** Locomotion is selected in C++ and played through
   `PlayAnimation`, so there is no blending and transitions snap. This is the
   single most visible rough edge and belongs in M8.
-- **No audio or VFX.** The hooks exist (engine loop, thruster scale) but no
-  assets are assigned.
-- **The animation packs are not in source control** (~1.2 GB). Restore them with
-  `Scripts/import_animation_packs.ps1`.
+- **No audio or VFX.** *(M8: superseded. Feedback is now dispatched through
+  `UEOFeedbackSubsystem` from data presets - see `Docs/M8-Feedback.md`. Aircraft
+  engine audio remains genuinely missing from the library.)*
+- **The asset packs are not in source control** (several GB). Restore them with
+  `Scripts/import_fab_assets.ps1`.
 - **Nothing has been played by a human.** Everything here is verified by the
   self-test suites, which prove the systems do what they claim. They cannot
   tell you whether any of it is enjoyable - which is the only question M8 asks.

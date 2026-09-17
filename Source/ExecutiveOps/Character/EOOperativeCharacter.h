@@ -50,6 +50,7 @@ protected:
 
 	void Input_Move(const FInputActionValue& Value);
 	void Input_Look(const FInputActionValue& Value);
+	void Input_LookStick(const FInputActionValue& Value);
 	void Input_Jump(const FInputActionValue& Value);
 	void Input_StopJump(const FInputActionValue& Value);
 	void Input_SprintStart(const FInputActionValue& Value);
@@ -64,6 +65,13 @@ protected:
 
 	UFUNCTION()
 	void HandleDied(AActor* Killer);
+
+	/** Damage is the one event the player must be able to locate, not just hear. */
+	UFUNCTION()
+	void HandleDamaged(float Amount, AActor* DamageInstigator);
+
+	/** Picks the impact preset for what the shot actually hit. */
+	static FName SurfaceEventFor(const FHitResult& Hit, bool bHitCharacter);
 
 	void TickCombat(float DeltaSeconds);
 
@@ -161,6 +169,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
 	TObjectPtr<UAnimSequence> SlideAnim;
 
+	/** Vertical impact speed above which a landing counts as hard. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0"))
+	float HardLandingSpeed = 900.f;
+
 	/** How long a drop may take before control is forced back to the player. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Deployment")
 	float DropTimeout = 6.f;
@@ -174,6 +186,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
 	float LookSensitivity = 1.f;
+
+	/** Degrees per second at full stick deflection. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
+	float StickLookRate = 140.f;
 
 public:
 	UFUNCTION(BlueprintPure, Category = "Deployment")

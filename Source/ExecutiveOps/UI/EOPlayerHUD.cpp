@@ -8,6 +8,7 @@
 #include "Core/EOPlayerController.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "Feedback/EOFeedbackSubsystem.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -105,6 +106,82 @@ void AEOPlayerHUD::DrawHUD()
 	DrawSelfSlot(Layout, State);
 	DrawChargeSlot(Layout, State);
 	DrawCommitSlot(Layout, State);
+
+	// Last, over everything: damage feedback that the frame could hide is damage
+	// feedback that does not work.
+	DrawScreenFeedback(Layout, State);
+}
+
+void AEOPlayerHUD::DrawScreenFeedback(const FEOHUDLayout& L, const FEOHUDState& S)
+{
+	const UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
+	if (!Feedback || !Canvas)
+	{
+		return;
+	}
+
+	const float W = Canvas->SizeX;
+	const float H = Canvas->SizeY;
+
+	const float Vignette = Feedback->GetVignetteAlpha();
+	if (Vignette > 0.f)
+	{
+		// Built from four edge bands rather than a full-screen overlay: the brief
+		// rules out full-screen flashes and sustained blur, and the centre of the
+		// screen is exactly where the player needs to keep seeing.
+		const float Depth = FMath::Min(W, H) * 0.14f;
+		const int32 Steps = 6;
+
+		for (int32 Step = 0; Step < Steps; ++Step)
+		{
+			const float Band = Depth / Steps;
+			const float Offset = Band * Step;
+
+			// Densest at the edge, fading inward.
+			const float Alpha = Vignette * 0.32f * (1.f - static_cast<float>(Step) / Steps);
+			const FLinearColor Colour = Alarm.CopyWithNewOpacity(Alpha);
+
+			DrawRect(Colour, 0.f, Offset, W, Band);					// top
+			DrawRect(Colour, 0.f, H - Offset - Band, W, Band);		// bottom
+			DrawRect(Colour, Offset, 0.f, Band, H);					// left
+			DrawRect(Colour, W - Offset - Band, 0.f, Band, H);		// right
+		}
+	}
+
+	FVector Direction;
+	float DamageAlpha = 0.f;
+	if (!Feedback->GetDamageDirection(Direction, DamageAlpha) || DamageAlpha <= 0.f)
+	{
+		return;
+	}
+
+	const APlayerController* PC = S.Controller ? S.Controller : PlayerOwner;
+	if (!PC)
+	{
+		return;
+	}
+
+	// Screen-space bearing to the shooter, so the marker sits where the player
+	// would have to turn, not where the damage numerically came from.
+	const float ReferenceYaw = PC->GetControlRotation().Yaw;
+	const float Bearing = FRotator::NormalizeAxis(Direction.Rotation().Yaw - ReferenceYaw);
+	const float Radians = FMath::DegreesToRadians(Bearing);
+
+	const float CX = W * 0.5f;
+	const float CY = H * 0.5f;
+	const float Radius = FMath::Min(W, H) * 0.24f;
+
+	const float MarkerX = CX + FMath::Sin(Radians) * Radius;
+	const float MarkerY = CY - FMath::Cos(Radians) * Radius;
+
+	// An arc, not an arrow: it reads at a glance and matches the threat arc the
+	// bearing slot already uses, so the player learns one shape rather than two.
+	DrawThreatArc(CX, CY, Radius, Bearing, 26.f,
+		Alarm.CopyWithNewOpacity(DamageAlpha), FMath::Max(2.f, L.Scale * 3.f),
+		/*bDashed=*/false);
+
+	DrawDiamond(MarkerX, MarkerY, L.S(7.f), Alarm.CopyWithNewOpacity(DamageAlpha),
+		FMath::Max(1.f, L.Scale * 2.f));
 }
 
 // ---------------------------------------------------------------------------

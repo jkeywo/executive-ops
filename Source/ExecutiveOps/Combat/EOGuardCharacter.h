@@ -180,6 +180,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Guard|Weapon")
 	float PreferredCombatRange = 900.f;
 
+	/** How close a miss has to pass the target to be worth hearing. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Guard|Combat", meta = (ClampMin = "0"))
+	float NearMissRadius = 300.f;
+
 	// ---- Takedown --------------------------------------------------------------
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Guard|Takedown")

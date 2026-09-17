@@ -178,6 +178,128 @@ Searches for these packs surface sites such as `ue3dfree.com` and `assetfreaks.c
 
 ---
 
+## G. Download recheck — later on 2026-09-17
+
+Re-scanned the vault. Most of sections A and F are now **downloaded payloads**, not just entitlements. Project `Content/` is still untouched (1,443 assets, animation only) — nothing has been migrated in yet.
+
+### Downloaded and ready to migrate
+
+| Pack | Size | Verified contents |
+|---|---|---|
+| **Paragon: Twinblast** | 2.4 GB | 389 FX assets, 484 audio cues |
+| **Paragon: Lt. Belica** | 2.0 GB | 524 FX assets, 489 audio cues, separate `Audio/Cues` + `DialogueWaves` + `Wavs` tree |
+| **Explosions Builder** | 1.5 GB | (out of M8 scope) |
+| **Big Niagara Bundle** | 789 MB | `NS_Jet`, `NS_Jets`, `NS_Four_Jets`, `NS_Sprite_Engine`, `NS_Sprite_Engine_with_Jet`, `NS_RelativisticJet`, plus dust/sparks/shockwave and `BP_Jets_Movement` / `BP_SpriteEngineMovement` driver blueprints |
+| **VFX Grenade Pack** | 633 MB | spark cues, `GrenadeCameraShake` |
+| **Chameleon Post Process** | 261 MB | see "buried finds" below |
+| **Human Vocalizations** | 148 MB | **7 voice actors** — HumanMale A/B/C/D, HumanFemale A/B/C — each with its own `Cues` and `Wavs` trees. More per-character variation than expected; enough to give guards distinct voices. |
+| **Easy Impact Frames** | 133 MB | `BP_Impact_Frames_Manager`, camera shake `BP_CS_01`, VFX set, demo character |
+| **NEON WEX — Muzzle Flash FX** | 62 MB | **11 Niagara muzzle flashes** (`FXS_NS_MuzzleFlash_00–10`), `FXS_NS_ShotBurst_01/02`, separate Shell and Smoke particle folders, plus its own `Sound/Sfx` folder |
+| **Essential Footsteps SFX** | 49 MB | 521 files. Per surface: Walk / Jog / Run / Jump / **Land** / Walk_Stop / Jog_Stop / Run_Stop. Concrete, Dirt, Glass, Gravel, Leaves, Metal, Sand, Slush, Snow |
+| **SCI-FI UI SOUND EFFECTS PACK** | 19 MB | 786 files: Clicks, Click_Combos, FX_Sounds, Glitches, Impacts, Rings, Tone1/2/3 |
+| **Free Weapon Sound Effects** | 4.5 MB | Handgun: 3 gunshots + silenced variants + **4-stage reload** (slide lock, mag drop, mag insert, slide release) + equip + tails. Same structure for assault rifle and shotgun. |
+| Animation packs | — | Dynamic Locomotion, Fighting Animset Pro, Open World Animset, Strike A Pose, Death Animations |
+
+### Still not downloaded
+
+- **Male Character Vocalizations LITE** (Hove Audio, free) — redundant now that Human Vocalizations turns out to carry **seven distinct voice actors** (HumanMale A–D, HumanFemale A–C), each with its own cue tree.
+
+### Downloaded since, and now imported
+
+- **Lyra Starter Game** → `Documents\Unreal Projects\LyraStarterGame`. Its `Content/Audio` carries `Sounds/WhizBys` (16 bullet in/out passes), `Sounds/Impacts`, `Sounds/Weapons` (Pistol, Rifle, Shotgun MetaSounds), `Sounds/Footsteps`, `Sounds/Movement`, `Sounds/UI`, plus `Feedback/CameraShakes` and `Feedback/Haptics` worth reading as reference.
+- **Niagara Examples Pack** → `HoldingProject/Content/NiagaraExamples`. `FX_Weapons/Impacts` gives `NS_Impact_Concrete`, `_Metal`, `_Wood`, `_Glass`; plus `NS_MuzzleFlash`, `NS_BulletTracer`, and the `FX_Sparks` set.
+
+All thirteen packs are now imported into `Content/` by `Scripts/import_fab_assets.ps1` and excluded from git.
+
+### Buried finds inside packs already downloaded
+
+- **`T_BulletHole`** — a bullet hole texture, sitting in Chameleon's `Textures` folder. Section F said author the decal yourself; the texture is already on disk. One decal material away from done.
+- **`M_EdgeDetect3x3HLSL`** — an edge-detection post-process material in Chameleon. This is the comic-book ink-line look, already owned.
+- **`M_Alarm`** — alarm-state post-process material in Chameleon. Maps directly onto the detection-confirmed state.
+- **`BP_CS_01`** in Easy Impact Frames and `GrenadeCameraShake` in the VFX Grenade Pack — two worked camera shake examples to pattern the nine presets on.
+- **NEON WEX ships its own `Sound/Sfx`** — muzzle audio you were not expecting to get with a free VFX pack.
+
+### Paragon — confirmed by inspection, not description
+
+- **Particles are Cascade** (`P_` prefix), as predicted. Route them through the Cascade-to-Niagara converter.
+- **Genuinely useful donors:** `P_TwinBlast_Nitro_HitWorld`, `P_TwinBlast_Nitro_HitCharacter`, `P_TwinBlast_Nitro_Bullet_Trail_Smoke_Spline`, `P_DiveBooster_Kickup_XForward`, `P_DiveBooster_Arms`, `P_NitroActive_CameraFX`. That is hard-surface impact, character impact, bullet trail and thruster kickup dust — four of the brief's weapon and aircraft VFX entries, from a free pack.
+- **Audio is dialogue only, and confirmed unusable for guard barks.** Every file is `*_Dialogue.uasset` with MOBA-specific names: `Ability_LowMana`, `Ability_OnCooldown`, `Ability_Q_Engage`, `Ability_UsedLastMana`. There is no detection, patrol or investigation vocabulary anywhere in it.
+
+---
+
+## H. Remaining gaps, sourced beyond Fab
+
+Five gaps survive everything downloaded. Licences verified individually.
+
+### 1. Aircraft / VTOL audio — the one genuine gap
+
+Still nothing. No free pack anywhere gives a speed-blendable VTOL loop set; this is assembly work whichever route you take.
+
+| Source | Licence | What you get |
+|---|---|---|
+| **Pixabay** (`pixabay.com/sound-effects`) | Pixabay Content License — **commercial use allowed, no attribution required**. You may not resell the files standalone in substantially unchanged form; using them as game audio is fine. | Jet engine, turbine and airplane engine loops, searchable and individually auditioned. The most practical route: pick 4–5 files and layer them. |
+| **Sonniss #GameAudioGDC 2026** | Royalty-free, no attribution, perpetual, commercial. **AI/ML training prohibited.** | 7.47 GB, 347+ files from 17 vendors (344 Audio, Epic Stock Media, SoundBits, Just Sound Effects, The Noisery and others). Split ZIPs, Google Drive mirror or torrent. Past years' archive adds ~200 GB. Raw location recordings — no aircraft guarantee, so audition before committing time. |
+| **Kenney — Sci-fi Sounds** (`kenney.nl`) | **CC0**, no attribution | 70 sounds, engine material included. Arcade-flavoured rather than grounded — a fallback, not a first choice. |
+| **freesound.org**, CC0 filter | CC0 | Individual turbine and airflow recordings. Filter to CC0 specifically; the site mixes CC-BY and non-commercial licences. |
+
+**Honest recommendation: this is still the £13.44 I would spend.** Aircraft is the M8 verb the player spends most time inside, layered audio is the hardest thing to fake from scraps, and Aircraft Engines Sound Pack hands you accel/decel/RPM structured for exactly this.
+
+### 2. Bullet impacts, ricochet and whizz-by → **Lyra Starter Game** (Epic, Free)
+
+The strongest find of this pass. Free, **UE 5.0–5.8**, licensed as *UE-Only Content* — which constrains it to Unreal-based products, and this is one.
+
+Lyra's core weapon, character and gameplay audio is built in **MetaSounds**, including a system that simulates the bullet **whizz-by** effect from weapon fire — brief §2.4's "near-miss / bullet whizz", which nothing else free covers. It also carries footsteps, impacts and UI cues, and the MetaSound graphs are worth reading as reference for the speed-blended aircraft audio you will build in step 6.
+
+Caveat: distributed as a **complete project**, not an asset pack, so you open it separately and migrate assets across rather than adding it to Executive Ops.
+
+### 3. Hard-surface and character impact VFX → already solvable
+
+**Niagara Examples Pack** (Epic, free, listed 5.7) plus the Paragon `P_*_HitWorld` / `P_*_HitCharacter` Cascade donors above. No further sourcing needed.
+
+### 4. Movement foley — slide, vault contact, cloth/armour
+
+Essential Footsteps covers walk/jog/run/stop/jump/land only. Slide, vault hand and foot contact, and cloth movement are missing. **Sonniss** foley libraries and **freesound** CC0 are the routes; a vault hand-slap and a fabric rustle are two of the easier things to find, or to record on a phone. Low risk, low cost, some curation.
+
+### 5. Guard barks — no good free answer
+
+- **Kenney Voiceover Pack** — 90 files, CC0, male and female. Thin and generic.
+- **itch.io CC0 voice packs** — the available ones (*Warrior*, *Mage*, *Orc*, *RPG Voice Starter*) are fantasy-flavoured; wrong register for a cyberpunk guard.
+- **Human Vocalizations** (owned) covers non-verbal pain, death and effort across seven actors — which may be enough, since the brief asks for *state readability*, not authored dialogue.
+
+Try shipping M8 on non-verbal vocals plus the UI alert family. If detection states still read poorly in playtest, **Soldier Character PRO Voice Pack (£13.44)** is the fix — but that is a decision to make after testing, not before.
+
+### Revised spend after the recheck
+
+**£0 of the section F stack is still outstanding** — it is all downloaded. Remaining considered spend: **£13.44 aircraft audio** (recommended), plus **£13.44 guard barks** only if playtesting demands it.
+
+---
+
+## I. What the M8 pass actually consumed
+
+Implemented in `Source/ExecutiveOps/Feedback/` and bound by `Scripts/m8_build_feedback_presets.py`. See `Docs/M8-Feedback.md`.
+
+| Verb | Audio | VFX | Camera / screen |
+|---|---|---|---|
+| Flight | *(gap)* | — | FOV impulse on surge and brake |
+| Aircraft impact | SciFi UI impacts | Niagara Examples `NS_Impact_Metal`, Big Niagara sparks | `EOShake_AircraftCollision` |
+| Deployment | Human Vocalizations effort | Big Niagara `NS_Jets`, `NS_DustActive` | `EOShake_DeployLaunch`, +12° FOV |
+| Landing | Essential Footsteps `Land` | Big Niagara dust | `EOShake_HardLanding` |
+| Parkour | Human Vocalizations effort, Essential Footsteps metal contact | — | — |
+| Slide | Essential Footsteps run-stop | Big Niagara low dust | — |
+| Takedown | SciFi UI impacts | Easy Impact Frames | `EOShake_TakedownImpact` + 0.08s local hit-stop |
+| Pistol | Free Weapon Sounds handgun | NEON WEX muzzle flash, Niagara Examples impacts | `EOShake_PistolRecoil` |
+| Guard fire | Free Weapon Sounds | NEON WEX muzzle | — |
+| Near miss | **Lyra WhizBys** | — | — |
+| Player damage | Human Vocalizations pain | — | `EOShake_PlayerDamage`, vignette, direction indicator |
+| Detection ladder | SciFi UI rings and glitches | — | Restrained vignette on confirm only |
+| Extraction | SciFi UI combos and impacts | — | `EOShake_ExtractionBoard` |
+
+**Unused by M8, deliberately:** Explosions Builder, VFX Grenade Pack, Paragon (both packs — animation and Cascade FX donors for later, not for a feedback pass), Chameleon's LUT library. Chameleon contributes `T_BulletHole`, `M_EdgeDetect3x3HLSL` and `M_Alarm` when the post-process pass happens.
+
+**The one gap the pass could not fill:** aircraft engine audio. `Aircraft_Accelerate` and `Aircraft_BrakeHard` ship carrying FOV and camera response only.
+
+---
+
 ## Sources
 
 - Free substitutes on Fab: [Niagara Examples Pack (Epic)](https://www.fab.com/listings/0e188eca-4e54-4fb2-a9ed-d8b8a565e600) · [NEON WEX — Free Muzzle Flash FX](https://www.fab.com/listings/f81d7b34-525f-4700-9794-cb436a71dfb0) · [Free Weapon Sound Effects](https://www.fab.com/listings/1697af22-7e2a-410e-b8c0-88239216520d) · [SCI-FI UI SOUND EFFECTS PACK](https://www.fab.com/listings/d3d9b060-7b69-4130-91d3-c96c2f3cb549) · [Male Character Vocalizations LITE](https://www.fab.com/listings/6199187d-eb1e-4b30-ae3e-a46fece5e83e) · [Easy Impact Frames](https://www.fab.com/listings/15cb7c95-3220-43fe-8d68-c67c73e83eba)
@@ -186,3 +308,4 @@ Searches for these packs surface sites such as `ue3dfree.com` and `assetfreaks.c
 - [Epic Developer Community — Paragon assets have voice cues only, no ability SFX](https://forums.unrealengine.com/t/sound-fx-missing-from-the-paragon-assets-is-a-tragedy/109364)
 - [UE 5.8 docs — Cascade to Niagara Effects Converter plugin](https://dev.epicgames.com/documentation/en-us/unreal-engine/cascade-to-niagara-effects-converter-plugin-for-unreal-engine)
 - [Sonniss GDC Game Audio Bundle](https://gdc.sonniss.com/) · [licence](https://sonniss.com/gdc-bundle-license/)
+- Beyond Fab: [Lyra Starter Game](https://www.fab.com/listings/93faede1-4434-47c0-85f1-bf27c0820ad0) (also via the Epic Games Launcher UE Samples tab) · [Kenney audio packs, CC0](https://kenney.nl/assets/category:Audio) · [Pixabay Content License](https://pixabay.com/service/license-summary/) · [freesound.org CC0](https://freesound.org/browse/tags/cc0/) · [OpenGameArt Sci-Fi Sound Effects Library (CC-BY 3.0 — attribution required)](https://opengameart.org/content/sci-fi-sound-effects-library)

@@ -7,6 +7,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "EngineUtils.h"
 #include "ExecutiveOps.h"
+#include "Feedback/EOFeedbackEvents.h"
+#include "Feedback/EOFeedbackSubsystem.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 AEOGuardCharacter::AEOGuardCharacter()
@@ -233,7 +235,47 @@ void AEOGuardCharacter::SetState(EEOGuardState NewState)
 		*StaticEnum<EEOGuardState>()->GetNameStringByValue(static_cast<int64>(State)),
 		*StaticEnum<EEOGuardState>()->GetNameStringByValue(static_cast<int64>(NewState)));
 
+	const EEOGuardState OldState = State;
 	State = NewState;
+
+	// Escalation has to be audible from inside the player's own head: they cannot
+	// see the guard's posture when running away from it. One cue per rung.
+	if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
+	{
+		FEOFeedbackContext Context = FEOFeedbackContext::AtActor(this);
+		Context.AttachTo = GetRootComponent();
+
+		switch (NewState)
+		{
+		case EEOGuardState::Suspicious:
+			Feedback->Play(EOFeedbackEvents::Guard_Suspicious, Context);
+			break;
+
+		case EEOGuardState::Alerted:
+			Feedback->Play(EOFeedbackEvents::Guard_DetectConfirmed, Context);
+			break;
+
+		case EEOGuardState::Searching:
+			Feedback->Play(EOFeedbackEvents::Guard_Searching, Context);
+			break;
+
+		case EEOGuardState::Patrolling:
+			// Dropping back to patrol from anywhere up the ladder is the all-clear,
+			// and is the only one of these the player actively wants to hear.
+			if (OldState != EEOGuardState::Dead)
+			{
+				Feedback->Play(EOFeedbackEvents::Guard_LostContact, Context);
+			}
+			break;
+
+		case EEOGuardState::Dead:
+			Feedback->Play(EOFeedbackEvents::Guard_Death, Context);
+			break;
+
+		default:
+			break;
+		}
+	}
 
 	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
 	{
@@ -434,15 +476,55 @@ void AEOGuardCharacter::FireAtTarget()
 	// ECC_Pawn, not ECC_Visibility: the default Pawn collision profile ignores
 	// the Visibility channel, so a Visibility trace goes straight through the
 	// character it is aimed at and buries itself in the scenery behind them.
-	FHitResult Hit;
-	if (World->LineTraceSingleByChannel(Hit, Muzzle, End, ECC_Pawn, Params))
+	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
+	if (Feedback)
 	{
-		if (AActor* HitActor = Hit.GetActor())
+		FEOFeedbackContext Shot = FEOFeedbackContext::At(Muzzle);
+		Shot.Rotation = Direction.Rotation();
+		Feedback->Play(EOFeedbackEvents::Guard_Fire, Shot);
+	}
+
+	FHitResult Hit;
+	const bool bHit = World->LineTraceSingleByChannel(Hit, Muzzle, End, ECC_Pawn, Params);
+
+	AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
+	bool bHitTarget = false;
+
+	if (HitActor)
+	{
+		if (UEOHealthComponent* HitHealth = HitActor->FindComponentByClass<UEOHealthComponent>())
 		{
-			if (UEOHealthComponent* HitHealth = HitActor->FindComponentByClass<UEOHealthComponent>())
-			{
-				HitHealth->ApplyDamage(ShotDamage, this);
-			}
+			HitHealth->ApplyDamage(ShotDamage, this);
+			bHitTarget = true;
+		}
+	}
+
+	if (Feedback && !bHitTarget)
+	{
+		// A miss is the interesting case. The brief's test for this verb is that a
+		// near miss moves the player before any health is lost, so the whizz is
+		// placed at the closest point of the shot line to them - i.e. where it
+		// actually passed - and scaled by how close that was.
+		const FVector MuzzleToTarget = Target->GetActorLocation() - Muzzle;
+		const float Along = FMath::Clamp(FVector::DotProduct(MuzzleToTarget, Direction), 0.f, SightRange);
+		const FVector ClosestPoint = Muzzle + Direction * Along;
+		const float MissDistance = FVector::Dist(ClosestPoint, Target->GetActorLocation());
+
+		if (MissDistance < NearMissRadius)
+		{
+			FEOFeedbackContext Whizz = FEOFeedbackContext::At(ClosestPoint);
+			Whizz.Rotation = Direction.Rotation();
+			Whizz.Scale = FMath::Clamp(1.f - MissDistance / NearMissRadius, 0.3f, 1.f);
+			Feedback->Play(EOFeedbackEvents::Guard_NearMiss, Whizz);
+		}
+
+		if (bHit)
+		{
+			// Something took the round. Dust or sparks nearby is half of why enemy
+			// fire reads as dangerous rather than as an abstract health drain.
+			FEOFeedbackContext Impact = FEOFeedbackContext::At(Hit.ImpactPoint);
+			Impact.Rotation = Hit.ImpactNormal.Rotation();
+			Feedback->Play(EOFeedbackEvents::Pistol_HitHard, Impact);
 		}
 	}
 

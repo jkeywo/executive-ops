@@ -2,6 +2,10 @@
 
 #include "ExecutiveOps.h"
 #include "EngineUtils.h"
+#include "Feedback/EOFeedbackEvents.h"
+#include "Feedback/EOFeedbackSubsystem.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
 #include "Interfaces/EOMissionParticipantInterface.h"
 #include "Mission/EOMissionSite.h"
 
@@ -144,6 +148,39 @@ void UEOMissionSubsystem::SetMissionState(EEOMissionState NewState)
 		*StaticEnum<EEOMissionState>()->GetNameStringByValue(static_cast<int64>(NewState)));
 
 	OnMissionStateChanged.Broadcast(OldState, NewState);
+
+	// Mission beats are non-diegetic, so they play on the player rather than at a
+	// world position - there is nowhere in the level they sensibly come from.
+	if (UEOFeedbackSubsystem* Feedback = GetWorld() ? GetWorld()->GetSubsystem<UEOFeedbackSubsystem>() : nullptr)
+	{
+		FEOFeedbackContext Context;
+		if (const APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			if (const APawn* Pawn = PC->GetPawn())
+			{
+				Context.Location = Pawn->GetActorLocation();
+				Context.AttachTo = Pawn->GetRootComponent();
+			}
+		}
+
+		switch (NewState)
+		{
+		case EEOMissionState::ObjectiveComplete:
+			Feedback->Play(EOFeedbackEvents::Objective_Complete, Context);
+			break;
+
+		case EEOMissionState::Extracting:
+			Feedback->Play(EOFeedbackEvents::Extraction_Call, Context);
+			break;
+
+		case EEOMissionState::Complete:
+			Feedback->Play(EOFeedbackEvents::Extraction_Board, Context);
+			break;
+
+		default:
+			break;
+		}
+	}
 
 	// Push to any actor that cares, so participants do not each need to bind.
 	if (UWorld* World = GetWorld())
