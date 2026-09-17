@@ -50,6 +50,13 @@ COMBAT_ANIMS = {
     "DeathAnim":    OWA + "/Deaths/death_aim_chest_01",
     # No bespoke assassination in the packs; one contextual strike is enough.
     "TakedownAnim": OWA + "/NPC/Anim_TA_ANG_hit_fist",
+
+    # Aiming holds the body toward the crosshair and strafes, so the legs need a
+    # clip per direction - a standing aim idle just slid around the floor.
+    "AimStrafeForward":  OWA + "/Pistol/Pistol_strafe_fwd",
+    "AimStrafeBackward": OWA + "/Pistol/Pistol_strafe_bwd",
+    "AimStrafeLeft":     OWA + "/Pistol/Pistol_strafe_left",
+    "AimStrafeRight":    OWA + "/Pistol/Pistol_strafe_right",
 }
 
 TRAVERSAL_ANIMS = {

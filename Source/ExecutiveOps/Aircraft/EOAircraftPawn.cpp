@@ -171,6 +171,11 @@ void AEOAircraftPawn::ApplyViewMode()
 	{
 		CockpitPivot->SetRelativeRotation(FRotator::ZeroRotator);
 	}
+
+	if (CockpitCamera)
+	{
+		CockpitCamera->SetRelativeRotation(FRotator::ZeroRotator);
+	}
 }
 
 const UEOInputConfig* AEOAircraftPawn::GetInputConfig() const
@@ -433,9 +438,13 @@ void AEOAircraftPawn::UpdateLook(float DeltaSeconds)
 
 	if (bFirstPerson)
 	{
-		if (CockpitPivot)
+		// The camera turns inside the cockpit, not with it. CockpitMesh is a child
+		// of CockpitPivot, so rotating the pivot swung the whole interior round
+		// with the view - the canopy frames and console moved with your head,
+		// which reads as the aircraft yawing rather than the pilot looking.
+		if (CockpitCamera)
 		{
-			CockpitPivot->SetRelativeRotation(Offset);
+			CockpitCamera->SetRelativeRotation(Offset);
 		}
 		return;
 	}

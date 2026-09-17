@@ -115,6 +115,21 @@ struct FEOFeedbackPreset
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Feedback|Decal", meta = (ClampMin = "0"))
 	float DecalLifetime = 12.f;
 
+	/**
+	 * Seconds before an ATTACHED effect is told to stop.
+	 *
+	 * Attached systems are spawned with auto-destroy, which only fires once the
+	 * system finishes - a looping one never does. A one-shot event that attaches
+	 * a looping system therefore welds it to the character permanently, which is
+	 * how the deployment jets ended up trailing off the operative's back for the
+	 * rest of the mission.
+	 *
+	 * Zero leaves the system to manage itself, which is right for genuinely
+	 * finite effects.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Effect", meta = (ClampMin = "0"))
+	float EffectLifetime = 2.5f;
+
 	// ---- Timing ---------------------------------------------------------------------------
 
 	/**

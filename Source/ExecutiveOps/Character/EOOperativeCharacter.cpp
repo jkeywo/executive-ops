@@ -57,9 +57,17 @@ AEOOperativeCharacter::AEOOperativeCharacter()
 	// Light positional lag only. The boom trails the capsule slightly so footfalls
 	// and slides do not transmit straight into the view; rotation is left rigid
 	// because the mouse must stay exact.
+	//
+	// No max distance: a clamp holds the boom at its limit while the operative
+	// accelerates away, then releases it all at once when they stop, which reads
+	// as the camera snapping back to where it thought you were. Lag alone trails
+	// and recovers continuously, so there is nothing to spring.
+	//
+	// The speed is high enough that a sprint barely drags the view - at 18 the
+	// steady-state trail was most of a metre.
 	CameraBoom->bEnableCameraLag = true;
-	CameraBoom->CameraLagSpeed = 18.f;
-	CameraBoom->CameraLagMaxDistance = 60.f;
+	CameraBoom->CameraLagSpeed = 30.f;
+	CameraBoom->CameraLagMaxDistance = 0.f;
 
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
@@ -712,9 +720,50 @@ void AEOOperativeCharacter::UpdateLocomotionAnimation()
 		return;
 	}
 
+	// Authored speed of whatever gets chosen, so the play rate can be matched to
+	// the ground speed below.
+	float ClipSpeed = 0.f;
+
 	if (bAiming && !bSliding && !Movement->IsFalling())
 	{
-		Wanted = AimAnim ? AimAnim : IdleAnim;
+		const float AimSpeed = Movement->Velocity.Size2D();
+
+		if (AimSpeed < 10.f)
+		{
+			Wanted = AimAnim ? AimAnim : IdleAnim;
+		}
+		else
+		{
+			// Aiming locks the body to the crosshair and strafes, so the clip is
+			// chosen by which way the operative is travelling relative to where
+			// they are facing - not by how fast.
+			const FVector Facing = GetActorForwardVector().GetSafeNormal2D();
+			const FVector Right = GetActorRightVector().GetSafeNormal2D();
+			const FVector Travel = Movement->Velocity.GetSafeNormal2D();
+
+			const float Forward = FVector::DotProduct(Facing, Travel);
+			const float Lateral = FVector::DotProduct(Right, Travel);
+
+			if (FMath::Abs(Forward) >= FMath::Abs(Lateral))
+			{
+				Wanted = (Forward >= 0.f) ? AimStrafeForward : AimStrafeBackward;
+			}
+			else
+			{
+				Wanted = (Lateral >= 0.f) ? AimStrafeRight : AimStrafeLeft;
+			}
+
+			// Fall back to the standing aim rather than popping to an unarmed run
+			// if a strafe clip has not been assigned.
+			if (!Wanted)
+			{
+				Wanted = AimAnim ? AimAnim : IdleAnim;
+			}
+			else
+			{
+				ClipSpeed = StrafeAnimSpeed;
+			}
+		}
 	}
 	else if (bSliding)
 	{
@@ -734,14 +783,17 @@ void AEOOperativeCharacter::UpdateLocomotionAnimation()
 		else if (Speed > SprintSpeed * 0.9f)
 		{
 			Wanted = SprintAnim;
+			ClipSpeed = SprintAnimSpeed;
 		}
 		else if (Speed > WalkSpeed * 0.6f)
 		{
 			Wanted = JogAnim;
+			ClipSpeed = JogAnimSpeed;
 		}
 		else
 		{
 			Wanted = WalkAnim;
+			ClipSpeed = WalkAnimSpeed;
 		}
 	}
 
@@ -750,6 +802,20 @@ void AEOOperativeCharacter::UpdateLocomotionAnimation()
 	{
 		MeshComp->PlayAnimation(Wanted, bLoop);
 		CurrentAnim = Wanted;
+	}
+
+	// Match the cycle to the ground speed. Re-applied every frame because speed
+	// changes continuously within a band - accelerating out of a standing start
+	// otherwise plays a full-speed run cycle over a character barely moving.
+	if (Wanted && ClipSpeed > KINDA_SMALL_NUMBER)
+	{
+		const float Rate = FMath::Clamp(Movement->Velocity.Size2D() / ClipSpeed,
+			MinAnimPlayRate, MaxAnimPlayRate);
+		MeshComp->SetPlayRate(Rate);
+	}
+	else if (Wanted)
+	{
+		MeshComp->SetPlayRate(1.f);
 	}
 }
 

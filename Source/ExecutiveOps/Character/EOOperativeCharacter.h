@@ -175,6 +175,49 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
 	TObjectPtr<UAnimSequence> AimAnim;
 
+	/**
+	 * Aiming holds the body toward the crosshair and strafes, so the legs need
+	 * a clip per direction. Without these, aiming froze the operative in a
+	 * standing idle that slid around the floor.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimSequence> AimStrafeForward;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimSequence> AimStrafeBackward;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimSequence> AimStrafeLeft;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimSequence> AimStrafeRight;
+
+	/**
+	 * Ground speed each locomotion clip was authored at.
+	 *
+	 * Clips play at a fixed rate, so a run cycle authored for 8m/s looks like
+	 * slow motion while the operative is still accelerating. Scaling the play
+	 * rate by actual speed keeps the feet with the ground.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	float WalkAnimSpeed = 160.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	float JogAnimSpeed = 450.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	float SprintAnimSpeed = 800.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	float StrafeAnimSpeed = 300.f;
+
+	/** Clamp, so a crawl does not stall the clip and a sprint does not gabble it. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	float MinAnimPlayRate = 0.65f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	float MaxAnimPlayRate = 1.6f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
 	TObjectPtr<UAnimSequence> FireAnim;
 

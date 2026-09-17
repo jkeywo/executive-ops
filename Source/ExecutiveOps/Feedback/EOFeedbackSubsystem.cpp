@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInterface.h"
+#include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
@@ -162,9 +163,31 @@ void UEOFeedbackSubsystem::ApplyEffect(const FEOFeedbackPreset& Preset,
 
 	if (Preset.bAttachEffect && Context.AttachTo)
 	{
-		UNiagaraFunctionLibrary::SpawnSystemAttached(System, Context.AttachTo, NAME_None,
+		UNiagaraComponent* Spawned = UNiagaraFunctionLibrary::SpawnSystemAttached(
+			System, Context.AttachTo, NAME_None,
 			FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::SnapToTarget,
 			/*bAutoDestroy*/ true);
+
+		// Auto-destroy only fires when the system completes, and a looping system
+		// never completes - so without this an attached loop rides the character
+		// for the rest of the session. Deactivate lets what has already been
+		// emitted finish naturally, then auto-destroy cleans up.
+		if (Spawned && Preset.EffectLifetime > 0.f)
+		{
+			if (UWorld* World = Spawned->GetWorld())
+			{
+				TWeakObjectPtr<UNiagaraComponent> Weak(Spawned);
+				FTimerHandle StopTimer;
+				World->GetTimerManager().SetTimer(StopTimer,
+					FTimerDelegate::CreateLambda([Weak]()
+					{
+						if (Weak.IsValid())
+						{
+							Weak->Deactivate();
+						}
+					}), Preset.EffectLifetime, false);
+			}
+		}
 	}
 	else
 	{
