@@ -86,6 +86,7 @@ Open the console with `` ` ``:
 | `EOToggleMap` | Show/hide the tactical map |
 | `EOMissionState` | Log the current mission state |
 | `EOToggleDebugHUD` | Show/hide the debug readout |
+| `EOToggleHUD` | Show/hide the player HUD frame |
 
 ## Architecture
 
@@ -97,7 +98,7 @@ Source/ExecutiveOps/
   Aircraft/     Placeholder VTOL  (real handling is M1)
   Character/    Operative         (parkour is M4, combat is M5)
   Input/        Enhanced Input actions and mapping contexts, declared in C++
-  UI/           Canvas debug HUD
+  UI/           Canvas HUDs: player frame, flight navigation, debug readout
   Debug/        Cheat manager
 ```
 

@@ -6,6 +6,7 @@
 #include "Mission/EOMissionSubsystem.h"
 #include "UI/EODebugHUD.h"
 #include "UI/EONavigationHUD.h"
+#include "UI/EOPlayerHUD.h"
 #include "Mission/EOMissionSite.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 
@@ -82,6 +83,17 @@ void UEOCheatManager::EOToggleDebugHUD()
 		if (AEODebugHUD* HUD = Cast<AEODebugHUD>(PC->GetHUD()))
 		{
 			HUD->ToggleVisible();
+		}
+	}
+}
+
+void UEOCheatManager::EOToggleHUD()
+{
+	if (const APlayerController* PC = GetOuterAPlayerController())
+	{
+		if (AEOPlayerHUD* HUD = Cast<AEOPlayerHUD>(PC->GetHUD()))
+		{
+			HUD->ToggleFrame();
 		}
 	}
 }

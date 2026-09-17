@@ -11,7 +11,9 @@
 
 namespace
 {
-	const FLinearColor ObjectiveColour(1.f, 0.75f, 0.1f);
+	// The frame's accent: the waypoint and the compass marker point at the same
+	// site, so they are not allowed to disagree about what colour it is.
+	const FLinearColor ObjectiveColour(0.275f, 0.847f, 0.745f);
 	const FLinearColor MapInkColour(0.35f, 0.4f, 0.45f);
 	const FLinearColor PlayerColour(0.2f, 0.9f, 1.f);
 
@@ -182,7 +184,7 @@ void AEONavigationHUD::DrawTacticalMap(const AEOMissionSite* Site, const APawn& 
 
 	const float Size = MapScreenSize;
 	const float Left = Canvas->SizeX - Size - MapScreenMargin;
-	const float Top = MapScreenMargin;
+	const float Top = MapScreenMargin + MapTopOffset;
 	const FVector2D Centre(Left + Size * 0.5f, Top + Size * 0.5f);
 
 	// The map is north-up and centred on the player, so it stays readable while

@@ -38,6 +38,10 @@ public:
 	UFUNCTION(Exec)
 	void EOToggleDebugHUD();
 
+	/** Show/hide the player HUD frame. */
+	UFUNCTION(Exec)
+	void EOToggleHUD();
+
 	/** Show/hide the tactical map. */
 	UFUNCTION(Exec)
 	void EOToggleMap();

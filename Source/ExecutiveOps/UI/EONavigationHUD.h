@@ -52,6 +52,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Navigation")
 	float MapScreenMargin = 24.f;
 
+	/**
+	 * Extra distance down from the top margin. The player HUD owns the top right
+	 * corner, so it pushes the map below its standing panel rather than under it.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "Navigation")
+	float MapTopOffset = 0.f;
+
 	/** Half-height below which a mesh is treated as ground or overhead, not a building. */
 	UPROPERTY(EditDefaultsOnly, Category = "Navigation")
 	float MinPlottedHeight = 250.f;
