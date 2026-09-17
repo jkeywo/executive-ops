@@ -130,38 +130,161 @@ def import_texture(path, slot):
     return texture
 
 
+MI_PATH = DEST + "/MI_PlayerShip"
+
+
 def build_material(textures):
+    """
+    A parameterised PBR material for the hull.
+
+    Everything is a parameter so the look can be tuned on a Material Instance
+    without recompiling the graph - M8 is a tuning pass and recompiling a
+    4096-map shader for every tweak is not a workflow.
+
+    The one non-obvious part is the emissive. The albedo is a dark charcoal hull
+    with saturated cyan and magenta accent panels painted into it, and unlit
+    those panels read as slightly-off grey. Chroma - how far a pixel is from
+    neutral - isolates exactly those panels without needing a hand-authored
+    emissive mask, so the trim glows and the hull does not.
+    """
     if EAL.does_asset_exist(MAT_PATH):
         EAL.delete_asset(MAT_PATH)
 
     material = AT.create_asset("M_PlayerShip", DEST, unreal.Material,
                                unreal.MaterialFactoryNew())
 
-    slots = [
-        ("BaseColor", unreal.MaterialProperty.MP_BASE_COLOR, -400, -300),
-        ("Normal", unreal.MaterialProperty.MP_NORMAL, -400, 100),
-        ("Roughness", unreal.MaterialProperty.MP_ROUGHNESS, -400, 300),
-        ("Metallic", unreal.MaterialProperty.MP_METALLIC, -400, 500),
-    ]
+    def expr(cls, x, y):
+        return MEL.create_material_expression(material, cls, x, y)
 
-    for slot, prop, x, y in slots:
-        texture = textures.get(slot)
-        if not texture:
-            log("no " + slot + " map; leaving that input at its default")
-            continue
+    def tex_param(name, texture, x, y, sampler=None):
+        node = expr(unreal.MaterialExpressionTextureSampleParameter2D, x, y)
+        node.set_editor_property("parameter_name", name)
+        if texture:
+            node.set_editor_property("texture", texture)
+        if sampler:
+            node.set_editor_property("sampler_type", sampler)
+        return node
 
-        sample = MEL.create_material_expression(
-            material, unreal.MaterialExpressionTextureSample, x, y)
-        sample.texture = texture
+    def scalar(name, value, x, y):
+        node = expr(unreal.MaterialExpressionScalarParameter, x, y)
+        node.set_editor_property("parameter_name", name)
+        node.set_editor_property("default_value", value)
+        return node
 
-        # Greyscale maps carry their value in R, not RGB.
-        out = "RGB" if slot in ("BaseColor", "Normal") else "R"
-        MEL.connect_material_property(sample, out, prop)
+    def connect(src, src_out, dst, dst_in):
+        MEL.connect_material_expressions(src, src_out, dst, dst_in)
+
+    # ---- Maps ---------------------------------------------------------------
+    base = tex_param("BaseColorMap", textures.get("BaseColor"), -1100, -400)
+    normal = tex_param("NormalMap", textures.get("Normal"), -1100, 100,
+                       unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+    rough = tex_param("RoughnessMap", textures.get("Roughness"), -1100, 400,
+                      unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+    metal = tex_param("MetallicMap", textures.get("Metallic"), -1100, 700,
+                      unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+
+    # ---- Base colour --------------------------------------------------------
+    tint = expr(unreal.MaterialExpressionVectorParameter, -700, -600)
+    tint.set_editor_property("parameter_name", "Tint")
+    tint.set_editor_property("default_value", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+
+    tinted = expr(unreal.MaterialExpressionMultiply, -400, -450)
+    connect(base, "RGB", tinted, "A")
+    connect(tint, "RGB", tinted, "B")
+    MEL.connect_material_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    # ---- Normal -------------------------------------------------------------
+    MEL.connect_material_property(normal, "RGB", unreal.MaterialProperty.MP_NORMAL)
+
+    # ---- Roughness and metallic --------------------------------------------
+    rough_scale = scalar("RoughnessScale", 1.0, -700, 500)
+    rough_mul = expr(unreal.MaterialExpressionMultiply, -400, 420)
+    connect(rough, "R", rough_mul, "A")
+    connect(rough_scale, "", rough_mul, "B")
+    MEL.connect_material_property(rough_mul, "", unreal.MaterialProperty.MP_ROUGHNESS)
+
+    metal_scale = scalar("MetallicScale", 1.0, -700, 800)
+    metal_mul = expr(unreal.MaterialExpressionMultiply, -400, 720)
+    connect(metal, "R", metal_mul, "A")
+    connect(metal_scale, "", metal_mul, "B")
+    MEL.connect_material_property(metal_mul, "", unreal.MaterialProperty.MP_METALLIC)
+
+    # ---- Emissive from the painted-in neon trim -----------------------------
+    # chroma = max(R,G,B) - min(R,G,B). Near zero on the charcoal hull, high on
+    # the cyan and magenta panels.
+    def channel(mask_r, mask_g, mask_b, y):
+        node = expr(unreal.MaterialExpressionComponentMask, -800, y)
+        node.set_editor_property("r", mask_r)
+        node.set_editor_property("g", mask_g)
+        node.set_editor_property("b", mask_b)
+        node.set_editor_property("a", False)
+        connect(base, "RGB", node, "")
+        return node
+
+    red = channel(True, False, False, -1000)
+    green = channel(False, True, False, -900)
+    blue = channel(False, False, True, -800)
+
+    max_rg = expr(unreal.MaterialExpressionMax, -600, -1000)
+    connect(red, "", max_rg, "A")
+    connect(green, "", max_rg, "B")
+
+    max_rgb = expr(unreal.MaterialExpressionMax, -450, -1000)
+    connect(max_rg, "", max_rgb, "A")
+    connect(blue, "", max_rgb, "B")
+
+    min_rg = expr(unreal.MaterialExpressionMin, -600, -830)
+    connect(red, "", min_rg, "A")
+    connect(green, "", min_rg, "B")
+
+    min_rgb = expr(unreal.MaterialExpressionMin, -450, -830)
+    connect(min_rg, "", min_rgb, "A")
+    connect(blue, "", min_rgb, "B")
+
+    chroma = expr(unreal.MaterialExpressionSubtract, -300, -900)
+    connect(max_rgb, "", chroma, "A")
+    connect(min_rgb, "", chroma, "B")
+
+    accent_boost = scalar("AccentBoost", 6.0, -450, -700)
+    boosted = expr(unreal.MaterialExpressionMultiply, -150, -880)
+    connect(chroma, "", boosted, "A")
+    connect(accent_boost, "", boosted, "B")
+
+    # Clamped, or a bright accent would blow the mask past 1 and bleed onto the
+    # surrounding hull.
+    mask = expr(unreal.MaterialExpressionClamp, 0, -880)
+    connect(boosted, "", mask, "")
+
+    accent_colour = expr(unreal.MaterialExpressionMultiply, 150, -800)
+    connect(base, "RGB", accent_colour, "A")
+    connect(mask, "", accent_colour, "B")
+
+    emissive_strength = scalar("EmissiveStrength", 3.0, 0, -650)
+    emissive = expr(unreal.MaterialExpressionMultiply, 350, -750)
+    connect(accent_colour, "", emissive, "A")
+    connect(emissive_strength, "", emissive, "B")
+    MEL.connect_material_property(emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
     MEL.recompile_material(material)
     EAL.save_loaded_asset(material)
     log("built material " + MAT_PATH)
+
     return material
+
+
+def build_instance(material):
+    """The tunable surface. Parameters live here so the graph is left alone."""
+    if EAL.does_asset_exist(MI_PATH):
+        EAL.delete_asset(MI_PATH)
+
+    factory = unreal.MaterialInstanceConstantFactoryNew()
+    instance = AT.create_asset("MI_PlayerShip", DEST,
+                               unreal.MaterialInstanceConstant, factory)
+    MEL.set_material_instance_parent(instance, material)
+
+    EAL.save_loaded_asset(instance)
+    log("built material instance " + MI_PATH)
+    return instance
 
 
 def fit_to_hull(mesh):
@@ -247,14 +370,15 @@ def main():
         imported[slot] = import_texture(path, slot)
 
     material = build_material(imported)
+    surface = build_instance(material) if material else None
 
-    if material:
+    if surface:
         mesh.set_editor_property("static_materials",
-                                 [unreal.StaticMaterial(material_interface=material)])
+                                 [unreal.StaticMaterial(material_interface=surface)])
         EAL.save_loaded_asset(mesh)
 
     scale, size, axis = fit_to_hull(mesh)
-    wire_to_aircraft(mesh, material, scale, size, axis)
+    wire_to_aircraft(mesh, surface, scale, size, axis)
 
     log("done")
 
