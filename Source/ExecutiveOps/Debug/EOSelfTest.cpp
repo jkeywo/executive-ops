@@ -2,6 +2,9 @@
 
 #include "Aircraft/EOAircraftPawn.h"
 #include "Character/EOOperativeCharacter.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Interfaces/EODeployableInterface.h"
 #include "Core/EOPlayerController.h"
 #include "ExecutiveOps.h"
 #include "GameFramework/Character.h"
@@ -24,6 +27,16 @@ bool UEOSelfTest::IsRequested()
 bool UEOSelfTest::ShouldExitAfterRun()
 {
 	return FParse::Param(FCommandLine::Get(), TEXT("EOSelfTestExit"));
+}
+
+bool UEOSelfTest::IsGroundTest()
+{
+	return FParse::Param(FCommandLine::Get(), TEXT("EOGroundTest"));
+}
+
+AEOOperativeCharacter* UEOSelfTest::GetOperative() const
+{
+	return Controller ? Cast<AEOOperativeCharacter>(Controller->GetPawn()) : nullptr;
 }
 
 void UEOSelfTest::Check(bool bCondition, const FString& Description)
@@ -57,7 +70,7 @@ void UEOSelfTest::Start(AEOPlayerController* InController)
 
 	UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] === self-test starting ==="));
 
-	Phase = EPhase::CoreState;
+	Phase = IsGroundTest() ? EPhase::GroundSetup : EPhase::CoreState;
 	PhaseDwell = 0.f;
 	PhaseElapsed = 0.f;
 
@@ -396,13 +409,180 @@ void UEOSelfTest::Step()
 		break;
 	}
 
+	// ---- M4: ground movement (run with -EOGroundTest in L_MissionTest) --------
+	case EPhase::GroundSetup:
+	{
+		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M4: ground movement --"));
+
+		Check(Controller->PossessOperative(), TEXT("can possess the operative"));
+
+		AEOOperativeCharacter* Op = GetOperative();
+		Check(Op != nullptr, TEXT("operative is possessed"));
+
+		if (Op)
+		{
+			IEODeployableInterface::Execute_SetStowed(Op, false);
+			Check(Op->HasControl(), TEXT("operative has ground control"));
+			Check(Op->GetTraversal() != nullptr, TEXT("operative has a traversal component"));
+		}
+
+		// Stand a stride in front of the 90cm wall, facing it.
+		CheckTraversalAt(FVector(1625.f, 0.f, 96.f), 0.f, EEOTraversalType::Vault, TEXT("low wall"));
+		Advance(EPhase::VaultCheck, 1.0f);
+		break;
+	}
+
+	case EPhase::VaultCheck:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		if (Op && Op->GetTraversal())
+		{
+			Check(!Op->GetTraversal()->IsTraversing(), TEXT("vault completes"));
+			Check(Op->GetActorLocation().X > 1800.f,
+				FString::Printf(TEXT("vault ends past the wall (x=%.0f)"), Op->GetActorLocation().X));
+
+			// Collision left disabled would be catastrophic and invisible.
+			Check(Op->GetCapsuleComponent()->GetCollisionEnabled() != ECollisionEnabled::NoCollision,
+				TEXT("collision is restored after a vault"));
+		}
+
+		CheckTraversalAt(FVector(4350.f, 0.f, 96.f), 0.f, EEOTraversalType::Mantle, TEXT("180cm ledge"));
+		Advance(EPhase::MantleCheck, 1.4f);
+		break;
+	}
+
+	case EPhase::MantleCheck:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		if (Op && Op->GetTraversal())
+		{
+			Check(!Op->GetTraversal()->IsTraversing(), TEXT("mantle completes"));
+			Check(Op->GetActorLocation().Z > 200.f,
+				FString::Printf(TEXT("mantle ends on top of the ledge (z=%.0f)"),
+					Op->GetActorLocation().Z));
+			Check(Op->GetCapsuleComponent()->GetCollisionEnabled() != ECollisionEnabled::NoCollision,
+				TEXT("collision is restored after a mantle"));
+		}
+
+		CheckTraversalAt(FVector(5950.f, -300.f, 96.f), 0.f, EEOTraversalType::Climb, TEXT("380cm wall"));
+		Advance(EPhase::ClimbCheck, 1.8f);
+		break;
+	}
+
+	case EPhase::ClimbCheck:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		if (Op && Op->GetTraversal())
+		{
+			Check(!Op->GetTraversal()->IsTraversing(), TEXT("climb completes"));
+			Check(Op->GetActorLocation().Z > 400.f,
+				FString::Printf(TEXT("climb ends on top of the wall (z=%.0f)"),
+					Op->GetActorLocation().Z));
+			Check(Op->GetCapsuleComponent()->GetCollisionEnabled() != ECollisionEnabled::NoCollision,
+				TEXT("collision is restored after a climb"));
+		}
+
+		// Open floor with nothing to traverse must not report a false positive.
+		if (Op && Op->GetTraversal())
+		{
+			Op->SetActorLocationAndRotation(FVector(600.f, 0.f, 96.f), FRotator::ZeroRotator,
+				false, nullptr, ETeleportType::TeleportPhysics);
+			Check(!Op->GetTraversal()->Scan().IsValid(),
+				TEXT("open ground reports nothing to traverse"));
+		}
+
+		Advance(EPhase::StowInterrupt, 0.5f);
+		break;
+	}
+
+	case EPhase::StowInterrupt:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		// Stowing mid-traversal must not leave collision on: the order of cancel
+		// and disable decides whether a hidden operative blocks the world.
+		if (Op && Op->GetTraversal())
+		{
+			CheckTraversalAt(FVector(1625.f, 0.f, 96.f), 0.f, EEOTraversalType::Vault,
+				TEXT("stow-interrupt vault"));
+
+			IEODeployableInterface::Execute_SetStowed(Op, true);
+			Check(!Op->GetTraversal()->IsTraversing(), TEXT("stowing cancels a traversal"));
+			Check(!Op->GetActorEnableCollision(),
+				TEXT("a stowed operative has no collision, even mid-traversal"));
+
+			IEODeployableInterface::Execute_SetStowed(Op, false);
+			Check(Op->GetActorEnableCollision(), TEXT("unstowing restores collision"));
+		}
+
+		Advance(EPhase::SlideCheck, 0.5f);
+		break;
+	}
+
+	case EPhase::SlideCheck:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		if (Op)
+		{
+			Op->SetActorLocationAndRotation(FVector(600.f, 0.f, 96.f), FRotator::ZeroRotator,
+				false, nullptr, ETeleportType::TeleportPhysics);
+
+			if (UCharacterMovementComponent* Movement = Op->GetCharacterMovement())
+			{
+				Movement->SetMovementMode(MOVE_Walking);
+
+				// Standing still: a crouch press is a crouch, not a slide.
+				Movement->Velocity = FVector::ZeroVector;
+				Check(!Op->TryStartSlide(), TEXT("cannot slide from a standstill"));
+
+				// At sprint speed it commits to a slide.
+				Movement->Velocity = FVector(900.f, 0.f, 0.f);
+				Check(Op->TryStartSlide(), TEXT("sliding starts at sprint speed"));
+				Check(Op->IsSliding(), TEXT("operative reports sliding"));
+
+				Check(Movement->CanEverCrouch(), TEXT("the operative is allowed to crouch"));
+				Check(Movement->MaxWalkSpeedCrouched > 500.f,
+					FString::Printf(TEXT("crouched speed cap allows the slide (%.0f)"),
+						Movement->MaxWalkSpeedCrouched));
+			}
+		}
+		// Crouch state resolves on the movement component's next tick, not on the
+		// Crouch() call, so it is confirmed a phase later.
+		Advance(EPhase::SlideConfirm, 0.4f);
+		break;
+	}
+
+	case EPhase::SlideConfirm:
+	{
+		AEOOperativeCharacter* Op = GetOperative();
+		if (Op)
+		{
+			Check(Op->bIsCrouched, TEXT("sliding actually crouches the capsule"));
+
+			Op->StopSlide();
+			Check(!Op->IsSliding(), TEXT("slide can be ended"));
+
+			if (UCharacterMovementComponent* Movement = Op->GetCharacterMovement())
+			{
+				Check(FMath::IsNearlyEqual(Movement->MaxWalkSpeed, 500.f, 1.f),
+					FString::Printf(TEXT("walk speed restored after a slide (%.0f)"),
+						Movement->MaxWalkSpeed));
+			}
+		}
+
+		Advance(EPhase::Done, 0.f);
+		break;
+	}
+
 	case EPhase::Done:
 	default:
-		if (APawn* Plane = GetAircraftPawn())
+		if (!IsGroundTest())
 		{
-			const float Speed = IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane);
-			Check(Speed > 100.f,
-				FString::Printf(TEXT("aircraft flies again after extraction (%.0f cm/s)"), Speed));
+			if (APawn* Plane = GetAircraftPawn())
+			{
+				const float Speed = IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane);
+				Check(Speed > 100.f,
+					FString::Printf(TEXT("aircraft flies again after extraction (%.0f cm/s)"), Speed));
+			}
 		}
 		Finish();
 		break;
@@ -471,6 +651,56 @@ void UEOSelfTest::SteerTowardSite()
 	}
 
 	IEOAircraftControlInterface::Execute_SetFlightInput(Craft, FVector(Forward, 0.f, Climb));
+}
+
+bool UEOSelfTest::CheckTraversalAt(const FVector& StandLocation, float FacingYaw,
+	EEOTraversalType Expected, const TCHAR* Label)
+{
+	AEOOperativeCharacter* Op = GetOperative();
+	UEOTraversalComponent* Traverse = Op ? Op->GetTraversal() : nullptr;
+	if (!Op || !Traverse)
+	{
+		Check(false, FString::Printf(TEXT("%s: no operative"), Label));
+		return false;
+	}
+
+	Op->SetActorLocationAndRotation(StandLocation, FRotator(0.f, FacingYaw, 0.f),
+		/*bSweep=*/false, nullptr, ETeleportType::TeleportPhysics);
+
+	const FEOTraversalQuery Query = Traverse->Scan();
+
+	const FString Found = StaticEnum<EEOTraversalType>()
+		->GetNameStringByValue(static_cast<int64>(Query.Type));
+
+	Check(Query.Type == Expected,
+		FString::Printf(TEXT("%s is detected as %s (found %s, %.0fcm)"),
+			Label,
+			*StaticEnum<EEOTraversalType>()->GetNameStringByValue(static_cast<int64>(Expected)),
+			*Found, Query.ObstacleHeight));
+
+	if (Query.Type != Expected)
+	{
+		return false;
+	}
+
+	// The destination has to be somewhere the operative can actually be.
+	Check(Query.EndLocation.Z > StandLocation.Z - 500.f,
+		FString::Printf(TEXT("%s ends somewhere sane"), Label));
+
+	// The arc has to pass OVER the obstacle. A quadratic Bezier only travels
+	// halfway to its control point, so this is the check that catches an apex
+	// that leaves the capsule sweeping through whatever it is clearing.
+	if (Expected == EEOTraversalType::Vault)
+	{
+		const float ObstacleTopZ = StandLocation.Z - 96.f + Query.ObstacleHeight;
+		Check(Query.ApexLocation.Z - 96.f > ObstacleTopZ - 10.f,
+			FString::Printf(TEXT("%s apex clears the obstacle top"), Label));
+	}
+
+	const bool bStarted = Traverse->TryTraverse();
+	Check(bStarted, FString::Printf(TEXT("%s traversal starts"), Label));
+	Check(Traverse->IsTraversing(), FString::Printf(TEXT("%s is in progress"), Label));
+	return bStarted;
 }
 
 void UEOSelfTest::Finish()

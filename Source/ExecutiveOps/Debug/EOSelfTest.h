@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
+#include "Character/EOTraversalComponent.h"
 #include "EOSelfTest.generated.h"
 
 class AEOPlayerController;
@@ -29,6 +30,13 @@ public:
 	/** True if -EOSelfTestExit was passed on the command line. */
 	static bool ShouldExitAfterRun();
 
+	/**
+	 * True if -EOGroundTest was passed: runs the M4 traversal checks against the
+	 * ground route instead of the flight sequence, since the two live in
+	 * different maps.
+	 */
+	static bool IsGroundTest();
+
 	/** Begins the phase sequence. Results are logged as they are produced. */
 	void Start(AEOPlayerController* InController);
 
@@ -51,6 +59,16 @@ private:
 		DeploymentDrop,
 		DeploymentLanded,
 		Extract,
+
+		// -EOGroundTest path.
+		GroundSetup,
+		VaultCheck,
+		MantleCheck,
+		ClimbCheck,
+		StowInterrupt,
+		SlideCheck,
+		SlideConfirm,
+
 		Done
 	};
 
@@ -63,6 +81,17 @@ private:
 	 * Runs every step during the approach rather than only at the dwell.
 	 */
 	void SteerTowardSite();
+
+	/**
+	 * Places the operative a stride in front of an obstacle facing it, then
+	 * reports what the traversal scan makes of it. Teleporting rather than
+	 * running there keeps each verb an isolated, repeatable check.
+	 */
+	bool CheckTraversalAt(const FVector& StandLocation, float FacingYaw,
+		EEOTraversalType Expected, const TCHAR* Label);
+
+	/** The possessed pawn as an operative, or null. */
+	class AEOOperativeCharacter* GetOperative() const;
 
 	void Check(bool bCondition, const FString& Description);
 	void Finish();

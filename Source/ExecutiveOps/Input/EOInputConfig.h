@@ -69,6 +69,9 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
 	TObjectPtr<UInputAction> SprintAction;
 
+	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
+	TObjectPtr<UInputAction> SlideAction;
+
 private:
 	/** Builds the two mapping contexts with keyboard/mouse defaults. */
 	void BuildDefaultMappings();

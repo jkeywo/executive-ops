@@ -21,6 +21,25 @@ MAPS = "/Game/Maps"
 BP = "/Game/Blueprints"
 
 SKELETON = "/Game/OpenWorldAnimset/UE4_Mannequin/Mesh/UE4_Mannequin_Skeleton"
+
+OWA = "/Game/OpenWorldAnimset/Animations"
+
+# Locomotion and traversal clips from the owned Open World set. Kept here rather
+# than in C++ so the code carries no asset paths.
+ANIMS = {
+    "IdleAnim":   OWA + "/Idles/Idle",
+    "WalkAnim":   OWA + "/FMotion/Walk/FMotion_Walk_Fast_Loop",
+    "JogAnim":    OWA + "/FMotion/Jog/FMotion_Jog_Fast_Loop",
+    "SprintAnim": OWA + "/FMotion/Sprint/FMotion_Sprint_Loop",
+    "FallAnim":   OWA + "/Jump/Jog_Jump_Start",
+    "SlideAnim":  OWA + "/Slide/Slide_Idle",
+}
+
+TRAVERSAL_ANIMS = {
+    "VaultAnim":  OWA + "/Vault/Vault_jog",
+    "MantleAnim": OWA + "/Ledge/High_Ledge_Up_Crouch",
+    "ClimbAnim":  OWA + "/Climb/Climb_scrambling_path",
+}
 SK_MESH = "/Game/OpenWorldAnimset/UE4_Mannequin/Mesh/SK_Mannequin"
 
 
@@ -83,6 +102,13 @@ def create_blueprints():
             if mat:
                 thruster.set_material(0, mat)
 
+    def assign_anims(target, mapping):
+        for prop, path in mapping.items():
+            anim = unreal.load_asset(path)
+            if not anim:
+                raise RuntimeError("animation not found: " + path)
+            target.set_editor_property(prop, anim)
+
     def cfg_operative(cdo):
         # ACharacter's skeletal mesh component is the UPROPERTY named "Mesh".
         mesh = cdo.get_editor_property("Mesh")
@@ -96,6 +122,12 @@ def create_blueprints():
         # Stand the mannequin up inside the capsule.
         mesh.set_editor_property("relative_location", unreal.Vector(0.0, 0.0, -96.0))
         mesh.set_editor_property("relative_rotation", unreal.Rotator(0.0, 0.0, -90.0))
+
+        # Single-node playback: the character drives clips directly from C++.
+        mesh.set_editor_property("animation_mode", unreal.AnimationMode.ANIMATION_SINGLE_NODE)
+
+        assign_anims(cdo, ANIMS)
+        assign_anims(cdo.get_editor_property("Traversal"), TRAVERSAL_ANIMS)
 
     def cfg_controller(cdo):
         cdo.set_editor_property("AircraftClass", aircraft.generated_class())
@@ -272,14 +304,67 @@ def build_flight_map():
 
 def build_mission_map():
     """
-    M0 only needs this map to exist and boot. A floor, lighting and a player
-    start. M4/M6 build the actual route and arena.
+    M4's ground movement route: every traversal verb the milestone asks for, laid
+    out as a short circuit that can be run repeatedly.
+
+    Reads left to right from the insertion point:
+      open sprint -> low vault -> slide gap -> mantle ledge -> climb wall ->
+      rooftop with a jump gap -> drop down -> corner -> back to the start.
+
+    Two ways through the middle section: over the high wall, or around it via
+    the low route. Neither is meant to be optimal - the point is that the player
+    has a choice and neither one demands precise platforming.
     """
     fresh_level(MAPS + "/L_MissionTest")
     add_lighting()
 
     mat = unreal.load_asset(BASIC_MAT)
-    spawn_block(unreal.Vector(0, 0, -50), unreal.Vector(60, 60, 1), "Ground", mat)
+
+    def block(x, y, z, sx, sy, sz, label):
+        spawn_block(unreal.Vector(x, y, z), unreal.Vector(sx, sy, sz), label, mat)
+
+    # Floor.
+    block(0, 0, -50, 120, 120, 1, "Ground")
+
+    # --- Open sprint --------------------------------------------------------
+    # Nothing here on purpose: the route needs a stretch to build up speed in
+    # before the first obstacle, or sprint and slide never get exercised.
+
+    # --- Low vault ----------------------------------------------------------
+    # 90cm: under the 130cm vault threshold, so it is cleared without stopping.
+    block(1800, 0, 45, 1.5, 12, 0.9, "Vault_Low")
+
+    # --- Slide gap ----------------------------------------------------------
+    # A bar at head height with clear floor under it: has to be slid beneath.
+    block(3200, 0, 200, 2, 12, 0.6, "Slide_Bar_Underside")
+    block(3200, -700, 130, 2, 2, 2.6, "Slide_Bar_PostL")
+    block(3200, 700, 130, 2, 2, 2.6, "Slide_Bar_PostR")
+
+    # --- Mantle ledge -------------------------------------------------------
+    # 180cm: too tall to vault, low enough to pull up onto and stand.
+    block(4600, 0, 90, 3, 12, 1.8, "Mantle_Ledge")
+
+    # --- Branch: high wall, or the low route around it -----------------------
+    # Route A: a 380cm face to scramble up, ending on the upper deck.
+    block(6200, -300, 190, 3, 6, 3.8, "Climb_Wall")
+    block(7000, -300, 370, 10, 6, 0.4, "Upper_Deck")
+
+    # Route B: around the side at ground level, longer but no climbing.
+    block(6200, 500, 60, 3, 1, 1.2, "LowRoute_Step_A")
+    block(6800, 800, 60, 3, 1, 1.2, "LowRoute_Step_B")
+
+    # --- Jump gap on the upper deck -----------------------------------------
+    # The two decks are 500cm apart: a committed jump, not a step across.
+    block(8500, -300, 370, 10, 6, 0.4, "Upper_Deck_Far")
+
+    # --- Drop down and corner ------------------------------------------------
+    block(9800, -300, 180, 3, 6, 3.6, "Drop_Ledge")
+    block(9800, 1200, 45, 12, 1.5, 0.9, "Corner_Vault")
+
+    # --- Elevation change back to the start ----------------------------------
+    for i in range(4):
+        block(9000 - i * 900, 2400, 40 + i * 60, 4, 4, 0.8 + i * 1.2,
+              "Stair_{}".format(i))
 
     start = EAS.spawn_actor_from_class(
         unreal.PlayerStart, unreal.Vector(0, 0, 200), unreal.Rotator(0, 0, 0))
@@ -341,7 +426,7 @@ def verify():
         check(EAL.does_asset_exist(path), "asset exists: " + path)
 
     # Existence is not enough - load each map and confirm it actually has content.
-    for path, min_actors in [(MAPS + "/L_MissionTest", 6), (MAPS + "/L_FlightTest", 40)]:
+    for path, min_actors in [(MAPS + "/L_MissionTest", 20), (MAPS + "/L_FlightTest", 40)]:
         if not ELAS.load_level(path):
             check(False, "could not load " + path)
             continue

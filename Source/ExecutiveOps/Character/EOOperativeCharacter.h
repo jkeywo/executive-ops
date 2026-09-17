@@ -5,7 +5,9 @@
 #include "Interfaces/EODeployableInterface.h"
 #include "EOOperativeCharacter.generated.h"
 
+class UAnimSequence;
 class UCameraComponent;
+class UEOTraversalComponent;
 class USpringArmComponent;
 class UEOInputConfig;
 struct FInputActionValue;
@@ -38,6 +40,8 @@ protected:
 	/** Landing ends the drop and hands control to the player. */
 	virtual void Landed(const FHitResult& Hit) override;
 	virtual void UnPossessed() override;
+	virtual void Tick(float DeltaSeconds) override;
+	virtual void BeginPlay() override;
 
 	/** Safety net: a drop that never lands must not lock the player out forever. */
 	void OnDropTimedOut();
@@ -48,12 +52,60 @@ protected:
 	void Input_StopJump(const FInputActionValue& Value);
 	void Input_SprintStart(const FInputActionValue& Value);
 	void Input_SprintStop(const FInputActionValue& Value);
+	void Input_SlideStart(const FInputActionValue& Value);
+	void Input_SlideStop(const FInputActionValue& Value);
+
+	/** Chooses and plays the locomotion clip that matches what the body is doing. */
+	void UpdateLocomotionAnimation();
+
+	void TickSlide(float DeltaSeconds);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<UCameraComponent> FollowCamera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
+	TObjectPtr<UEOTraversalComponent> Traversal;
+
+	// ---- Slide ----------------------------------------------------------------
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Slide")
+	float SlideEntrySpeed = 700.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Slide")
+	float SlideImpulse = 1150.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Slide")
+	float SlideFriction = 700.f;
+
+	/** Below this the slide ends and the operative stands back up. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Slide")
+	float SlideExitSpeed = 320.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Slide")
+	float SlideMaxDuration = 1.6f;
+
+	// ---- Locomotion animation, assigned in the Blueprint from the owned packs --
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	TObjectPtr<UAnimSequence> IdleAnim;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	TObjectPtr<UAnimSequence> WalkAnim;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	TObjectPtr<UAnimSequence> JogAnim;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	TObjectPtr<UAnimSequence> SprintAnim;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	TObjectPtr<UAnimSequence> FallAnim;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
+	TObjectPtr<UAnimSequence> SlideAnim;
 
 	/** How long a drop may take before control is forced back to the player. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Deployment")
@@ -100,10 +152,45 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Deployment")
 	bool HasControl() const { return !bStowed && !bDeploying; }
 
+	UFUNCTION(BlueprintPure, Category = "Movement")
+	UEOTraversalComponent* GetTraversal() const { return Traversal; }
+
+	UFUNCTION(BlueprintPure, Category = "Movement")
+	bool IsSprinting() const { return bSprinting; }
+
+	UFUNCTION(BlueprintPure, Category = "Movement")
+	bool IsSliding() const { return bSliding; }
+
+	/** Sprinting into a crouch press starts a slide; otherwise it just crouches. */
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	bool TryStartSlide();
+
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void StopSlide();
+
 private:
 	const UEOInputConfig* GetInputConfig() const;
 
 	bool bStowed = false;
 	bool bDeploying = false;
+	bool bSprinting = false;
+	bool bSliding = false;
+	float SlideElapsed = 0.f;
+	FVector SlideDirection = FVector::ZeroVector;
+
+	/**
+	 * The slide owns its own speed. Reading it back off the movement component
+	 * each frame instead would measure whatever ground braking had already taken
+	 * away, and the slide would die in a fraction of a second.
+	 */
+	float SlideSpeed = 0.f;
+
+	/** Movement settings restored when the slide ends. */
+	float CachedGroundFriction = 8.f;
+	float CachedBrakingDeceleration = 2000.f;
+
+	/** The clip currently playing, so the same one is not restarted every frame. */
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequence> CurrentAnim;
 	FTimerHandle DropTimeoutTimer;
 };

@@ -2,6 +2,7 @@
 
 #include "Aircraft/EOAircraftPawn.h"
 #include "Character/EOOperativeCharacter.h"
+#include "Character/EOTraversalComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EngineUtils.h"
@@ -393,9 +394,14 @@ void AEOPlayerController::EOReset()
 
 	if (Operative)
 	{
-		// Cancel before moving: a live drop would otherwise keep its timeout
-		// running and fire CompleteDeployment against a mission that just reset.
+		// Cancel before moving: a live drop or traversal would otherwise keep
+		// running and drag the operative back across the level, or fire
+		// CompleteDeployment against a mission that just reset.
 		Operative->CancelDeploymentDrop();
+		if (UEOTraversalComponent* Traverse = Operative->GetTraversal())
+		{
+			Traverse->Cancel();
+		}
 		Operative->SetActorTransform(OperativeStartTransform);
 		Operative->GetCharacterMovement()->StopMovementImmediately();
 	}

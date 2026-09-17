@@ -53,6 +53,7 @@ void UEOInputConfig::BuildRuntimeInput()
 	MoveAction           = MakeAction(this, TEXT("IA_Move"),           EInputActionValueType::Axis2D);
 	JumpAction           = MakeAction(this, TEXT("IA_Jump"),           EInputActionValueType::Boolean);
 	SprintAction         = MakeAction(this, TEXT("IA_Sprint"),         EInputActionValueType::Boolean);
+	SlideAction          = MakeAction(this, TEXT("IA_Slide"),          EInputActionValueType::Boolean);
 
 	AircraftContext  = NewObject<UInputMappingContext>(this, TEXT("IMC_Aircraft"));
 	OperativeContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Operative"));
@@ -97,6 +98,12 @@ void UEOInputConfig::BuildDefaultMappings()
 
 	OperativeContext->MapKey(JumpAction, EKeys::SpaceBar);
 	OperativeContext->MapKey(SprintAction, EKeys::LeftShift);
+
+	// Jump is the contextual parkour button: it vaults, mantles or climbs when
+	// there is something there, and jumps when there is not. Two bindings on one
+	// key would both fire, so the decision lives in one handler instead.
+	OperativeContext->MapKey(SlideAction, EKeys::LeftControl);
+	OperativeContext->MapKey(SlideAction, EKeys::C);
 
 	OperativeContext->MapKey(LookAction, EKeys::Mouse2D).Modifiers.Add(MakeNegate(this, false, true, false));
 }
