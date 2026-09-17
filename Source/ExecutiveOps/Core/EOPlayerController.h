@@ -10,6 +10,7 @@ class AEOOperativeCharacter;
 class UEOInputConfig;
 class UEOSelfTest;
 class AEOMissionSite;
+class AEOExtractionZone;
 
 /**
  * Owns the player's relationship with the two halves of the game: which pawn is
@@ -46,9 +47,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Control")
 	bool RequestDeployment();
 
-	/** Operative -> aircraft. M7 adds the aircraft arrival and boarding. */
+	/**
+	 * Operative -> aircraft.
+	 *
+	 * With the objective done this calls the aircraft in and hands control back
+	 * once it arrives. At any other time it is the immediate debug handover the
+	 * cheat manager and the self-test use.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Control")
 	bool RequestExtraction();
+
+	/** True while the aircraft is inbound to collect the operative. */
+	UFUNCTION(BlueprintPure, Category = "Control")
+	bool IsExtractionInbound() const { return bExtractionInbound; }
+
+	/** Metres to the inbound aircraft, or -1 when nothing is inbound. */
+	UFUNCTION(BlueprintPure, Category = "Control")
+	float GetExtractionDistance() const;
 
 	/**
 	 * True when everything the drop needs is satisfied: possessing a stable
@@ -97,6 +112,18 @@ protected:
 	/** Enables the aircraft's assist while the player is lined up over the site. */
 	void UpdateDeploymentAssist();
 
+	/** Watches an inbound aircraft and performs the pickup when it arrives. */
+	void UpdateExtraction(float DeltaSeconds);
+
+	/** Starts the scripted arrival over the operative. */
+	bool BeginExtractionPickup();
+
+	/** Board, hand control back, and close the mission out. */
+	void CompleteExtractionPickup();
+
+	/** Stop an inbound arrival and hand the craft back to the player. */
+	void CancelExtraction();
+
 	/** Entry point for the -EOSelfTest command-line switch. */
 	void RunSelfTest();
 
@@ -120,6 +147,18 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Control|Deployment")
 	float DeployLaunchForward = 450.f;
 
+	/** How high above the operative the aircraft holds to collect them. */
+	UPROPERTY(EditDefaultsOnly, Category = "Control|Extraction")
+	float ExtractionHoverHeight = 700.f;
+
+	/** Seconds the pickup itself takes once the craft is overhead. */
+	UPROPERTY(EditDefaultsOnly, Category = "Control|Extraction")
+	float PickupDuration = 1.2f;
+
+	/** Give up waiting and hand control back rather than stranding the player. */
+	UPROPERTY(EditDefaultsOnly, Category = "Control|Extraction")
+	float ExtractionTimeout = 25.f;
+
 	/** Classes used when the level contains no placed pawn. */
 	UPROPERTY(EditDefaultsOnly, Category = "Control")
 	TSubclassOf<AEOAircraftPawn> AircraftClass;
@@ -135,6 +174,11 @@ private:
 	TObjectPtr<UEOSelfTest> SelfTest;
 
 	FTimerHandle RearmTimer;
+
+	bool bExtractionInbound = false;
+	float ExtractionElapsed = 0.f;
+	float PickupElapsed = 0.f;
+	FVector ExtractionPoint = FVector::ZeroVector;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AEOAircraftPawn> Aircraft;

@@ -91,6 +91,26 @@ void AEOPlayerController::RearmMission()
 		return;
 	}
 
+	// A rearm timer left over from the previous run must not reset the mission
+	// while the aircraft is on its way in to collect the player.
+	if (bExtractionInbound)
+	{
+		GetWorldTimerManager().SetTimer(
+			RearmTimer, this, &AEOPlayerController::RearmMission, RearmDelay, false);
+		return;
+	}
+
+	// Only re-arm a mission that is still closed out. If something else has
+	// already moved it on, this timer is stale and firing it would tear down a
+	// run that is currently underway.
+	UEOMissionSubsystem* Mission = World->GetSubsystem<UEOMissionSubsystem>();
+	if (Mission
+		&& Mission->GetMissionState() != EEOMissionState::Complete
+		&& Mission->GetMissionState() != EEOMissionState::Failed)
+	{
+		return;
+	}
+
 	// The objective is the one piece of mission state that is not owned by the
 	// subsystem, so re-arming has to reach into it explicitly. Left set, the
 	// second run has a terminal that can never be interacted with and an
@@ -111,10 +131,17 @@ void AEOPlayerController::RearmMission()
 		IEODeployableInterface::Execute_SetStowed(Operative, true);
 	}
 
-	if (UEOMissionSubsystem* Mission = World->GetSubsystem<UEOMissionSubsystem>())
+	bExtractionInbound = false;
+
+	if (Mission)
 	{
 		Mission->ResetMission();
 	}
+
+	// The operative was just stowed - hidden and collisionless. Without this the
+	// player is left driving an invisible character with the ground bindings and
+	// no way back to the aircraft.
+	PossessAircraft();
 
 	UE_LOG(LogExecutiveOps, Log, TEXT("Mission re-armed; ready for another run."));
 }
@@ -235,9 +262,12 @@ bool AEOPlayerController::PossessAircraft()
 
 	Possess(Aircraft);
 
-	// Returning to the aircraft always releases the deployment freeze. Leaving it
-	// set strands the player in a craft that silently ignores every input.
+	// Returning to the aircraft always releases the deployment freeze and any
+	// scripted arrival. Leaving either set strands the player in a craft that
+	// silently ignores every input.
 	IEOAircraftControlInterface::Execute_SetDeploymentHold(Aircraft, false);
+	IEOAircraftControlInterface::Execute_SetScriptedDestination(Aircraft, FVector::ZeroVector, false);
+	bExtractionInbound = false;
 
 	// A drop still in progress is abandoned rather than left running: otherwise
 	// the operative keeps falling and drives the mission to OnGround while the
@@ -328,6 +358,145 @@ void AEOPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateDeploymentAssist();
+	UpdateExtraction(DeltaSeconds);
+}
+
+float AEOPlayerController::GetExtractionDistance() const
+{
+	if (!bExtractionInbound || !Aircraft || !Operative)
+	{
+		return -1.f;
+	}
+	return FVector::Dist(Aircraft->GetActorLocation(), Operative->GetActorLocation()) * 0.01f;
+}
+
+bool AEOPlayerController::BeginExtractionPickup()
+{
+	if (!Aircraft || !Operative)
+	{
+		return false;
+	}
+
+	// Called in over the operative rather than to the pad: by the time the craft
+	// arrives the player may have been driven off the pad, and being collected
+	// where you actually are is the release the sequence is meant to be.
+	ExtractionPoint = Operative->GetActorLocation() + FVector(0.f, 0.f, ExtractionHoverHeight);
+	ExtractionElapsed = 0.f;
+	PickupElapsed = 0.f;
+	bExtractionInbound = true;
+
+	IEOAircraftControlInterface::Execute_SetStationKeepTarget(Aircraft, FVector::ZeroVector, false);
+	IEOAircraftControlInterface::Execute_SetScriptedDestination(Aircraft, ExtractionPoint, true);
+
+	UE_LOG(LogExecutiveOps, Log, TEXT("Extraction called; aircraft inbound."));
+	return true;
+}
+
+void AEOPlayerController::CancelExtraction()
+{
+	if (Aircraft)
+	{
+		// Leaving the craft flying itself means the player takes over an aircraft
+		// that silently ignores every input.
+		IEOAircraftControlInterface::Execute_SetScriptedDestination(Aircraft, FVector::ZeroVector, false);
+	}
+
+	bExtractionInbound = false;
+	ExtractionElapsed = 0.f;
+	PickupElapsed = 0.f;
+}
+
+void AEOPlayerController::UpdateExtraction(float DeltaSeconds)
+{
+	if (!bExtractionInbound)
+	{
+		return;
+	}
+
+	if (!Aircraft || !Operative)
+	{
+		CancelExtraction();
+		return;
+	}
+
+	// A player killed while the craft is inbound is not being collected. The
+	// mission has already failed and will re-arm on its own.
+	if (Operative->IsDead())
+	{
+		UE_LOG(LogExecutiveOps, Log, TEXT("Extraction aborted: operative died."));
+		CancelExtraction();
+		return;
+	}
+
+	ExtractionElapsed += DeltaSeconds;
+
+	// Read the arrival before refreshing the destination, or the refresh below
+	// invalidates the very flag being tested.
+	const bool bOverhead = IEOAircraftControlInterface::Execute_HasReachedScriptedDestination(Aircraft);
+
+	// Keep the destination over the operative while they are still moving, so a
+	// player fighting their way to the pad is still collected.
+	if (!bOverhead && PickupElapsed <= 0.f)
+	{
+		ExtractionPoint = Operative->GetActorLocation() + FVector(0.f, 0.f, ExtractionHoverHeight);
+		IEOAircraftControlInterface::Execute_SetScriptedDestination(Aircraft, ExtractionPoint, true);
+	}
+
+	if (bOverhead)
+	{
+		// Short pickup beat once the craft is overhead, so boarding reads as an
+		// action rather than a teleport.
+		PickupElapsed += DeltaSeconds;
+		if (PickupElapsed >= PickupDuration)
+		{
+			CompleteExtractionPickup();
+		}
+		return;
+	}
+
+	if (ExtractionElapsed >= ExtractionTimeout)
+	{
+		// Arrival blocked - scenery, a bad approach line. Collect the player
+		// anyway rather than leaving them standing in a finished mission.
+		UE_LOG(LogExecutiveOps, Warning,
+			TEXT("Extraction arrival timed out after %.0fs; collecting anyway."), ExtractionElapsed);
+		CompleteExtractionPickup();
+	}
+}
+
+void AEOPlayerController::CompleteExtractionPickup()
+{
+	bExtractionInbound = false;
+
+	UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>();
+
+	if (Operative)
+	{
+		IEODeployableInterface::Execute_OnExtractBegin(Operative, Aircraft);
+	}
+
+	if (Aircraft)
+	{
+		IEOAircraftControlInterface::Execute_SetScriptedDestination(Aircraft, FVector::ZeroVector, false);
+	}
+
+	if (!PossessAircraft())
+	{
+		// Extracting has no transition out, so leaving the mission there would
+		// end the run with no way to recover. Put it back to a playable state.
+		UE_LOG(LogExecutiveOps, Error, TEXT("Extraction pickup could not possess the aircraft."));
+		if (Mission)
+		{
+			Mission->ResetMission();
+		}
+		return;
+	}
+
+	if (Mission && Mission->GetMissionState() == EEOMissionState::Extracting)
+	{
+		Mission->CompleteMission();
+		UE_LOG(LogExecutiveOps, Log, TEXT("Mission complete; flying away."));
+	}
 }
 
 void AEOPlayerController::UpdateDeploymentAssist()
@@ -438,25 +607,41 @@ bool AEOPlayerController::RequestExtraction()
 	const bool bCompletesMission =
 		Mission && Mission->GetMissionState() == EEOMissionState::ObjectiveComplete;
 
-	IEODeployableInterface::Execute_OnExtractBegin(Operative, Aircraft);
-
-	// Possession first. Committing the state machine to Extracting and then
-	// failing to possess would strand the mission in a state nothing transitions
-	// out of, with the player still standing on the ground.
-	if (!PossessAircraft())
-	{
-		return false;
-	}
-
 	if (bCompletesMission)
 	{
-		// M7 replaces this instant hand-back with the aircraft actually arriving.
-		Mission->BeginExtraction();
-		Mission->CompleteMission();
-		UE_LOG(LogExecutiveOps, Log, TEXT("Mission complete."));
+		// The real extraction: call the craft in, keep the operative playable
+		// while it comes, and hand control over when it arrives.
+		if (bExtractionInbound)
+		{
+			return false;
+		}
+
+		if (!Mission->BeginExtraction())
+		{
+			return false;
+		}
+
+		if (!BeginExtractionPickup())
+		{
+			// Nothing to fly in. Fall back to the immediate handover rather than
+			// stranding the mission in Extracting.
+			IEODeployableInterface::Execute_OnExtractBegin(Operative, Aircraft);
+			if (!PossessAircraft())
+			{
+				Mission->ResetMission();
+				return false;
+			}
+			Mission->CompleteMission();
+		}
+		return true;
 	}
 
-	return true;
+	// Debug handover, used by the cheat manager and the self-test. Cancel any
+	// arrival first, or the pickup fires again later and the player spends the
+	// interim in an aircraft that ignores input.
+	CancelExtraction();
+	IEODeployableInterface::Execute_OnExtractBegin(Operative, Aircraft);
+	return PossessAircraft();
 }
 
 void AEOPlayerController::EOReset()
@@ -482,17 +667,24 @@ void AEOPlayerController::EOReset()
 	}
 
 	// Guards come back too, or the second run of a mission has nothing in it.
-	for (TActorIterator<AEOGuardCharacter> It(GetWorld()); It; ++It)
+	if (UWorld* World = GetWorld())
 	{
-		It->ResetGuard();
-	}
+		for (TActorIterator<AEOGuardCharacter> It(World); It; ++It)
+		{
+			It->ResetGuard();
+		}
 
-	for (TActorIterator<AEOObjectiveTerminal> It(GetWorld()); It; ++It)
-	{
-		It->ResetObjective();
+		for (TActorIterator<AEOObjectiveTerminal> It(World); It; ++It)
+		{
+			It->ResetObjective();
+		}
 	}
 
 	GetWorldTimerManager().ClearTimer(RearmTimer);
+
+	bExtractionInbound = false;
+	ExtractionElapsed = 0.f;
+	PickupElapsed = 0.f;
 
 	if (UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())
 	{

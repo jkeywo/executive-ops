@@ -122,8 +122,73 @@ void AEOAircraftPawn::Tick(float DeltaSeconds)
 	bLookActiveThisFrame = false;
 }
 
+bool AEOAircraftPawn::UpdateScriptedArrival(float DeltaSeconds)
+{
+	if (!bScriptedArrival)
+	{
+		return false;
+	}
+
+	const FVector ToTarget = ScriptedDestination - GetActorLocation();
+	const float Distance = ToTarget.Size();
+
+	// Turn the nose toward where it is going, so the arrival reads as the craft
+	// flying in rather than sliding sideways on rails.
+	const FVector Flat(ToTarget.X, ToTarget.Y, 0.f);
+	if (Flat.SizeSquared() > FMath::Square(200.f))
+	{
+		const FRotator Desired(0.f, Flat.Rotation().Yaw, 0.f);
+		SetActorRotation(FMath::RInterpTo(GetActorRotation(), Desired, DeltaSeconds, 3.f));
+	}
+
+	// Speed proportional to remaining distance: it slows into the hover instead
+	// of arriving at full speed and needing to be caught.
+	const float DesiredSpeed = FMath::Min(FlightMaxSpeed, Distance * ScriptedApproachGain);
+	const FVector Target = Distance > KINDA_SMALL_NUMBER
+		? ToTarget / Distance * DesiredSpeed
+		: FVector::ZeroVector;
+
+	Velocity = FMath::VInterpConstantTo(Velocity, Target, DeltaSeconds, FlightAcceleration);
+	ThrustAlpha = FMath::FInterpTo(ThrustAlpha, 0.6f, DeltaSeconds, 4.f);
+
+	if (!Velocity.IsNearlyZero())
+	{
+		FHitResult Hit;
+		AddActorWorldOffset(Velocity * DeltaSeconds, /*bSweep=*/true, &Hit);
+
+		if (Hit.bBlockingHit)
+		{
+			if (Hit.bStartPenetrating)
+			{
+				// Same escape the piloted path uses: projecting velocity onto the
+				// surface would delete the component that gets the craft clear.
+				AddActorWorldOffset(Hit.Normal * (Hit.PenetrationDepth + 1.f), /*bSweep=*/false);
+			}
+			else
+			{
+				// Clipped a building on the way in. Slide rather than stopping
+				// dead, damped per unit time so the penalty does not depend on
+				// frame rate - a per-frame halving stalls the craft completely
+				// at high refresh rates.
+				Velocity = FVector::VectorPlaneProject(Velocity, Hit.Normal)
+					* FMath::Pow(SlideRetentionPerSecond, DeltaSeconds);
+			}
+		}
+	}
+
+	// Arrived means settled, not merely passing through: a craft still doing
+	// 40 m/s through the radius has not stopped to collect anyone.
+	bScriptedArrived = (Distance <= ScriptedArriveRadius) && (Velocity.Size() < 400.f);
+	return true;
+}
+
 void AEOAircraftPawn::UpdateFlight(float DeltaSeconds)
 {
+	if (UpdateScriptedArrival(DeltaSeconds))
+	{
+		return;
+	}
+
 	if (bDeploymentHold)
 	{
 		// Genuinely parked: velocity was zeroed the instant hold was set, so the
@@ -474,6 +539,34 @@ void AEOAircraftPawn::SetDeploymentHold_Implementation(bool bHeld)
 	}
 }
 
+void AEOAircraftPawn::SetScriptedDestination_Implementation(const FVector& WorldLocation, bool bEnabled)
+{
+	// Only a real change invalidates the arrival. The caller refreshes this every
+	// frame to track a moving pickup point, and clearing the flag unconditionally
+	// would mean the craft could never be observed to have got there.
+	const bool bMoved = !ScriptedDestination.Equals(WorldLocation, 50.f);
+	if (bMoved || bEnabled != bScriptedArrival)
+	{
+		bScriptedArrived = false;
+	}
+
+	ScriptedDestination = WorldLocation;
+	bScriptedArrival = bEnabled;
+
+	if (bEnabled)
+	{
+		// The craft is flying itself; any held player demand would fight it the
+		// moment control came back.
+		ClearControlDemand();
+		bDeploymentHold = false;
+	}
+}
+
+bool AEOAircraftPawn::HasReachedScriptedDestination_Implementation() const
+{
+	return bScriptedArrived;
+}
+
 void AEOAircraftPawn::ResetFlightState_Implementation()
 {
 	MoveInput = FVector::ZeroVector;
@@ -484,6 +577,8 @@ void AEOAircraftPawn::ResetFlightState_Implementation()
 	ThrustAlpha = 0.f;
 	bStationKeepEnabled = false;
 	bDeploymentHold = false;
+	bScriptedArrival = false;
+	bScriptedArrived = false;
 
 	if (HullPivot)
 	{

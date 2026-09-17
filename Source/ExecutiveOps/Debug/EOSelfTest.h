@@ -77,6 +77,8 @@ private:
 		GuardAlerted,
 		GuardShootsPlayer,
 		GuardGunKill,
+		GuardGunAim,
+		GuardGunFire,
 		GuardLosesPlayer,
 		GuardLostConfirm,
 
@@ -84,6 +86,7 @@ private:
 		MissionSetup,
 		MissionObjective,
 		MissionExtract,
+		MissionPickup,
 		MissionSecondRun,
 
 		Done
@@ -112,6 +115,9 @@ private:
 
 	/** The single guard in the level, or null. */
 	class AEOGuardCharacter* GetGuard() const;
+
+	/** The aircraft in the level whether or not it is the possessed pawn. */
+	APawn* FindAircraftInLevel() const;
 
 	/** Puts the operative and the guard back to a known, unaware starting state. */
 	void ResetEncounter();

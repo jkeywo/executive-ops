@@ -49,6 +49,8 @@ public:
 	virtual void ResetFlightState_Implementation() override;
 	virtual void SetStationKeepTarget_Implementation(const FVector& WorldLocation, bool bEnabled) override;
 	virtual void SetDeploymentHold_Implementation(bool bHeld) override;
+	virtual void SetScriptedDestination_Implementation(const FVector& WorldLocation, bool bEnabled) override;
+	virtual bool HasReachedScriptedDestination_Implementation() const override;
 	//~ End IEOAircraftControlInterface
 
 	/** 0 = fully in flight mode, 1 = fully hovering. Drives handling and feedback. */
@@ -83,6 +85,9 @@ protected:
 
 	/** Integrate velocity from the current input, then sweep the actor through the world. */
 	void UpdateFlight(float DeltaSeconds);
+
+	/** Flies itself to ScriptedDestination. Returns true while it is doing so. */
+	bool UpdateScriptedArrival(float DeltaSeconds);
 
 	/** Bank, pitch and settle the hull to communicate what the craft is doing. */
 	void UpdateAttitude(float DeltaSeconds);
@@ -150,6 +155,14 @@ protected:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0", ClampMax = "1"))
 	float VelocityTurnFactor = 0.85f;
+
+	/** How aggressively a scripted arrival slows as it closes on its destination. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Extraction", meta = (ClampMin = "0.01"))
+	float ScriptedApproachGain = 1.4f;
+
+	/** Within this of the destination, and slow, the arrival counts as complete. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Extraction", meta = (ClampMin = "1"))
+	float ScriptedArriveRadius = 300.f;
 
 	/** Fraction of tangential speed kept per second while scraping along a surface. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0", ClampMax = "1"))
@@ -257,6 +270,10 @@ private:
 	FVector StationKeepTarget = FVector::ZeroVector;
 	bool bStationKeepEnabled = false;
 	bool bDeploymentHold = false;
+
+	FVector ScriptedDestination = FVector::ZeroVector;
+	bool bScriptedArrival = false;
+	bool bScriptedArrived = false;
 
 	/** Chase boom free-look, relative to the craft's own heading. */
 	float LookYawOffset = 0.f;

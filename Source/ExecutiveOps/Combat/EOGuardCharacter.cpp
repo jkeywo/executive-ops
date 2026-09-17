@@ -34,7 +34,12 @@ void AEOGuardCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	PatrolOrigin = GetActorLocation();
-	PatrolOriginRotation = GetActorRotation();
+
+	// Yaw only. A guard placed with a pitch would have a forward vector pointing
+	// at the sky, which silently breaks its vision cone, its patrol heading and
+	// the takedown rear-angle test.
+	PatrolOriginRotation = FRotator(0.f, GetActorRotation().Yaw, 0.f);
+	SetActorRotation(PatrolOriginRotation);
 
 	if (Health)
 	{

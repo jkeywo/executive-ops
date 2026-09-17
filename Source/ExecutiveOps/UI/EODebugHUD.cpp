@@ -112,6 +112,12 @@ void AEODebugHUD::DrawHUD()
 			DrawTextLine(TEXT("TAKEDOWN [F]"), Y, FLinearColor::Green);
 		}
 
+		if (EOController->IsExtractionInbound())
+		{
+			DrawTextLine(FString::Printf(TEXT("EXTRACTION INBOUND  %.0fm"),
+				EOController->GetExtractionDistance()), Y, FLinearColor(0.2f, 1.f, 0.6f));
+		}
+
 		if (AActor* Interactable = Operative->FindInteractable())
 		{
 			DrawTextLine(

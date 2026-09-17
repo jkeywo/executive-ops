@@ -217,9 +217,15 @@ def spawn_block(location, scale, label, material):
 
 
 def add_lighting():
-    """Minimum needed for the map to be visible."""
+    """
+    Minimum needed for the map to be visible.
+
+    Note unreal.Rotator is (roll, pitch, yaw), which is NOT the order FRotator
+    uses in C++. Positional arguments here silently pitch actors instead of
+    turning them, so every rotation in this file is passed by keyword.
+    """
     sun = EAS.spawn_actor_from_class(
-        unreal.DirectionalLight, unreal.Vector(0, 0, 2000), unreal.Rotator(-46, -30, 0))
+        unreal.DirectionalLight, unreal.Vector(0, 0, 2000), unreal.Rotator(roll=0.0, pitch=-46.0, yaw=-30.0))
     sun.set_actor_label("Sun")
     sun_comp = sun.get_component_by_class(unreal.DirectionalLightComponent)
     if sun_comp:
@@ -335,7 +341,7 @@ def build_flight_map():
         marker.set_material(0, mat)
 
     start = EAS.spawn_actor_from_class(
-        unreal.PlayerStart, unreal.Vector(-11000, -11000, 2500), unreal.Rotator(0, 45, 0))
+        unreal.PlayerStart, unreal.Vector(-16000, -16000, 6000), unreal.Rotator(roll=0.0, pitch=0.0, yaw=45.0))
     start.set_actor_label("PlayerStart")
 
     save_level(MAPS + "/L_FlightTest")
@@ -413,7 +419,7 @@ def build_mission_map(guard_bp=None):
     if guard_bp:
         guard = EAS.spawn_actor_from_class(
             guard_bp.generated_class(), unreal.Vector(3900, -600, 100),
-            unreal.Rotator(0, 90, 0))
+            unreal.Rotator(roll=0.0, pitch=0.0, yaw=90.0))
         guard.set_actor_label("Guard")
 
     cube = unreal.load_asset(CUBE)
@@ -446,7 +452,7 @@ def build_mission_map(guard_bp=None):
             comp.set_material(0, mat)
 
     start = EAS.spawn_actor_from_class(
-        unreal.PlayerStart, unreal.Vector(0, 0, 200), unreal.Rotator(0, 0, 0))
+        unreal.PlayerStart, unreal.Vector(0, 0, 200), unreal.Rotator(roll=0.0, pitch=0.0, yaw=0.0))
     start.set_actor_label("PlayerStart")
 
     save_level(MAPS + "/L_MissionTest")
@@ -468,7 +474,7 @@ def place_pawns_in_flight_map(aircraft_bp):
     else:
         craft = EAS.spawn_actor_from_class(
             aircraft_bp.generated_class(),
-            unreal.Vector(-11000, -11000, 2500), unreal.Rotator(0, 45, 0))
+            unreal.Vector(-16000, -16000, 6000), unreal.Rotator(roll=0.0, pitch=0.0, yaw=45.0))
         craft.set_actor_label("BP_Aircraft")
         log("placed aircraft in L_FlightTest")
 

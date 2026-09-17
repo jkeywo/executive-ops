@@ -145,8 +145,42 @@ Several Fab listings show a price *range* ("From free to £X", "From £4.46 to �
 
 ---
 
+## F. Free-only alternative stack
+
+Every paid recommendation above has a free substitute except aircraft engine audio. Licences checked individually — all listed here are flat **Free** under Fab's Standard License (valid commercially), not personal-tier-free, unless noted.
+
+| Paid pick | Free substitute | Source | Trade-off |
+|---|---|---|---|
+| **Pro Sound Collection** £44.82 | No single equivalent — replaced by the five free packs below plus Sonniss curation | — | This is the real loss. You give up one coherent, consistently-mastered library and 8,076 files of variation depth, and take on the job of level-matching packs from six different authors. Budget curation time instead of money. |
+| **Modern Pistols SFX** £4.46–8.95 | **Free Weapon Sound Effects** — SoundLab1 | Fab, Free | 6 weapons × 3 shot variations, includes handgun plus silenced variants, reload mechanics and handling sounds. Authored from scratch, no AI or third-party content. Meets the brief's "2–4 subtle variants" requirement exactly. Genuinely competitive — this is not a downgrade. |
+| **Aircraft Engines Sound Pack** £13.44 | **Sonniss #GameAudioGDC** archive + freesound.org (CC0 filter) | Free | **The one real gap.** Nothing on Fab gives a free, speed-blendable aircraft loop set. Sonniss archives are raw location recordings organised by contributor, so you are hunting through ~200GB for turbine and airflow material, then building the accel/decel/RPM layering yourself. Several hours of work versus £13.44. *This is the one I would still pay for.* |
+| **Stylized Shooting VFX Niagara** £18.81 | **NEON WEX — Free Muzzle Flash FX** — Night447 Studios | Fab, Free | Niagara muzzle flashes, UE5-native, and the listing explicitly grants free personal *and commercial* use. Neon-styled, so arguably a closer fit to the graphic-novel treatment than the paid pick. The seller offers a paid professional licence purely as a tip jar. |
+| — impacts half of the same job | **Niagara Examples Pack** — **Epic Games** | Fab, Free | **The strongest free find.** Epic's own pack: bullet impacts, sparks, trails, smoke, hit dissolves, animation-notify footstep effects, pings and markers — authored to best practice with Effect Types, Niagara Data Channels and lightweight emitters. Listed for **UE 5.7** against your 5.8, so verify import. Worth taking even if you buy everything else, as a reference for how the feedback layer should be structured. |
+| **VTOL Thrusters FX** £10.75 | Owned **Big Niagara Bundle** (`NS_Jets`, `NS_DustActive`) | Owned | Already the fallback named in section A. No new cost. |
+| **Decals VOL.6 — Bullet Holes** £8.95 | Author in-engine | — | A bullet decal is a masked texture on a deferred decal material. Two textures and one material instance, half an hour. Nothing here justifies a purchase. |
+| **Soldier Character PRO Voice Pack** £13.44 | **Male Character Vocalizations SFX Pack LITE** — Hove Audio | Fab, Free | 118 vocalizations across combat (14), dialogue (27), emotional states (32), health conditions (26), physical states (19). UCS-compliant naming. Covers the brief's guard state readability requirement and the takedown pain vocal. Pair with the free **Human Vocalizations** (Gamemaster) for breadth. |
+| **UI sound family** (inside Pro Sound Collection) | **SCI-FI UI SOUND EFFECTS PACK** — Hove Audio | Fab, Free | 100+ bleeps, 29 clicks, 12 rings, 31 glitches, 6 impacts. Coherent sci-fi family, which is exactly what §2.7 asks for. Delivered dry — the listing suggests adding delay and reverb. Alternatives: *Interface & Item Sounds Pack* (Daydream Sound), *UI SFX Free Pack* (Skril Studio), *TII 3Step SCI-FI Audio Package*. |
+| **Essential Footsteps SFX** £3.57 pro tier | **Footsteps Mini Sound Pack** — Mechanics Mechanics | Fab, flat Free | Avoids the personal-vs-professional licence question entirely. Smaller than the Kajiya pack; if you want the 272-file, 10-surface version for commercial use, £3.57 is the cheapest line on the whole list and not worth engineering around. |
+| **Comic impact accent** (listed as build-in-house) | **Easy Impact Frames** — Vefects | Fab, Free | UE **4.27, 5.0–5.8**. Stylised anime-style hit frames, drag-and-drop, customisable. Covers the takedown comic accent from §3 without authoring it. Reclassify this gap from "build" to "free download". |
+| **Foot contact dust** (optional, §3) | **Niagara Footstep VFX** — Sidearm Studios | Fab, Free | Optional brief item, now free. |
+
+### Revised cost
+
+- **All-free stack: £0**, with aircraft audio curated from Sonniss.
+- **£0 stack plus the one purchase worth keeping: £13.44** (Aircraft Engines Sound Pack, personal) or **£22.40** (professional).
+- Compare against **£77.07** for the Comfortable tier in section D.
+
+The free stack costs roughly a day of curation and level-matching that Pro Sound Collection would have saved. At M8 — a game-feel pass on a greybox, where nothing is final — that trade is reasonable. If audio work later becomes a recurring cost, Pro Sound Collection remains the sane purchase.
+
+### Not a source
+
+Searches for these packs surface sites such as `ue3dfree.com` and `assetfreaks.com` that redistribute paid Fab content as free downloads. Those are unlicensed copies — no valid licence for a commercial project, and repackaged `.uasset`/installer files are a standard malware vector. Everything in this section is a legitimately free asset from its own publisher.
+
+---
+
 ## Sources
 
+- Free substitutes on Fab: [Niagara Examples Pack (Epic)](https://www.fab.com/listings/0e188eca-4e54-4fb2-a9ed-d8b8a565e600) · [NEON WEX — Free Muzzle Flash FX](https://www.fab.com/listings/f81d7b34-525f-4700-9794-cb436a71dfb0) · [Free Weapon Sound Effects](https://www.fab.com/listings/1697af22-7e2a-410e-b8c0-88239216520d) · [SCI-FI UI SOUND EFFECTS PACK](https://www.fab.com/listings/d3d9b060-7b69-4130-91d3-c96c2f3cb549) · [Male Character Vocalizations LITE](https://www.fab.com/listings/6199187d-eb1e-4b30-ae3e-a46fece5e83e) · [Easy Impact Frames](https://www.fab.com/listings/15cb7c95-3220-43fe-8d68-c67c73e83eba)
 - Fab: [Paragon: Twinblast](https://www.fab.com/listings/9fa88852-5711-42e1-94fa-2491498a64da) · [Pro Sound Collection](https://www.fab.com/listings/baaa5ef9-1238-414d-97a1-f1c667aa1ec6) · [Human Vocalizations](https://www.fab.com/listings/98259abf-477f-4015-8abe-2c9f62eaefdb) · [Aircraft Engines Sound Pack](https://www.fab.com/listings/968b9092-493c-4425-9970-9932f8ce08d1) · [Modern Pistols SFX](https://www.fab.com/listings/3a3822f6-8f07-4139-8d53-e93bc760f3f5) · [Essential Footsteps SFX](https://www.fab.com/listings/d8833d76-3270-41d5-8fd0-efeae4057750)
 - [Epic Games — Paragon assets release](https://www.unrealengine.com/en-US/paragon)
 - [Epic Developer Community — Paragon assets have voice cues only, no ability SFX](https://forums.unrealengine.com/t/sound-fx-missing-from-the-paragon-assets-is-a-tragedy/109364)

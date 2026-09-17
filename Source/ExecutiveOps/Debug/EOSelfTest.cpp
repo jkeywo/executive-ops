@@ -45,6 +45,19 @@ AEOOperativeCharacter* UEOSelfTest::GetOperative() const
 	return Controller ? Cast<AEOOperativeCharacter>(Controller->GetPawn()) : nullptr;
 }
 
+APawn* UEOSelfTest::FindAircraftInLevel() const
+{
+	if (!Controller || !Controller->GetWorld())
+	{
+		return nullptr;
+	}
+	for (TActorIterator<AEOAircraftPawn> It(Controller->GetWorld()); It; ++It)
+	{
+		return *It;
+	}
+	return nullptr;
+}
+
 AEOGuardCharacter* UEOSelfTest::GetGuard() const
 {
 	if (!Controller || !Controller->GetWorld())
@@ -841,16 +854,77 @@ void UEOSelfTest::Step()
 		Check(!Op->IsDead(), TEXT("the operative revives for the next attempt"));
 		Check(!Guard->IsDead(), TEXT("the guard revives for the next attempt"));
 
-		const float GuardStart = Guard->GetHealth()->GetHealth();
+		// Pin the guard first. Shooting at a patrolling target puts the camera in a
+		// different place every run, and the aim trace can slip past it.
+		Guard->ResetGuard();
 
-		Op->SetActorLocation(Guard->GetActorLocation() + Guard->GetActorForwardVector() * 400.f,
+		Op->SetActorLocation(Guard->GetActorLocation() + Guard->GetActorForwardVector() * 900.f,
 			false, nullptr, ETeleportType::TeleportPhysics);
 
 		// The weapon aims where the CAMERA looks, and the camera boom follows the
-		// control rotation - so pointing the body at the guard is not enough.
+		// control rotation - so pointing the body at the guard is not enough, and
+		// the boom only picks the new rotation up on the pawn's next tick.
 		const FRotator AimAt = (Guard->GetActorLocation() - Op->GetActorLocation()).Rotation();
 		Op->SetActorRotation(FRotator(0.f, AimAt.Yaw, 0.f));
 		Controller->SetControlRotation(AimAt);
+
+		Advance(EPhase::GuardGunAim, 0.2f);
+		break;
+	}
+
+	case EPhase::GuardGunAim:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		AEOOperativeCharacter* Op = GetOperative();
+		if (!Guard || !Op)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		// Put the crosshair on the guard, iteratively.
+		//
+		// The chase boom hangs off the operative's shoulder, so rotating to aim
+		// also MOVES the camera - one correction does not converge. This is the
+		// same loop a player closes by hand, and getting it on target is itself
+		// worth asserting: if the crosshair cannot be put on a guard standing in
+		// the open, the weapon is unusable regardless of what the traces do.
+		FVector ViewLocation;
+		FRotator ViewRotation;
+		Controller->GetPlayerViewPoint(ViewLocation, ViewRotation);
+
+		FCollisionQueryParams AimParams(SCENE_QUERY_STAT(EOSelfTestAim), false, Op);
+
+		FHitResult AimHit;
+		const bool bOnTarget = Controller->GetWorld()->LineTraceSingleByChannel(
+			AimHit, ViewLocation, ViewLocation + ViewRotation.Vector() * 6000.f,
+			ECC_Pawn, AimParams) && AimHit.GetActor() == Guard;
+
+		if (bOnTarget || PhaseElapsed > 3.f)
+		{
+			Check(bOnTarget, TEXT("the crosshair can be put on the guard"));
+			Advance(EPhase::GuardGunFire, 0.1f);
+			break;
+		}
+
+		// Hold the guard still while the aim converges; a patrolling target moves
+		// the solution every iteration.
+		Guard->ResetGuard();
+		Controller->SetControlRotation((Guard->GetActorLocation() - ViewLocation).Rotation());
+		return;
+	}
+
+	case EPhase::GuardGunFire:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		AEOOperativeCharacter* Op = GetOperative();
+		if (!Guard || !Op || !Guard->GetHealth())
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		const float GuardStart = Guard->GetHealth()->GetHealth();
 
 		// Fire the actual weapon, so the trace channel and the damage path are
 		// both exercised rather than assumed.
@@ -906,6 +980,17 @@ void UEOSelfTest::Step()
 
 	case EPhase::MissionSetup:
 	{
+		// The ground suite drives the mission directly, so make sure the player
+		// is actually holding the operative before each run.
+		if (!GetOperative())
+		{
+			Controller->PossessOperative();
+		}
+		if (AEOOperativeCharacter* Ready = GetOperative())
+		{
+			IEODeployableInterface::Execute_SetStowed(Ready, false);
+		}
+
 		AEOOperativeCharacter* Op = GetOperative();
 		AEOObjectiveTerminal* Objective = GetObjective();
 		AEOExtractionZone* Zone = GetExtractionZone();
@@ -995,15 +1080,60 @@ void UEOSelfTest::Step()
 		Check(Op->FindInteractable() == Zone,
 			FString::Printf(TEXT("%s the pad offers extraction"), *Pass));
 
-		Check(Op->TryInteract(), FString::Printf(TEXT("%s extracting works"), *Pass));
+		// Park the aircraft a long way off, so the arrival is a real flight in
+		// rather than a craft that happens to already be overhead.
+		if (APawn* Inbound = FindAircraftInLevel())
+		{
+			Inbound->SetActorLocation(Op->GetActorLocation() + FVector(-9000.f, -6000.f, 5000.f),
+				false, nullptr, ETeleportType::TeleportPhysics);
+			IEOAircraftControlInterface::Execute_ResetFlightState(Inbound);
+		}
+
+		Check(Op->TryInteract(), FString::Printf(TEXT("%s calling extraction works"), *Pass));
+		Check(Mission && Mission->GetMissionState() == EEOMissionState::Extracting,
+			FString::Printf(TEXT("%s mission enters Extracting"), *Pass));
+		Check(Controller->IsExtractionInbound(),
+			FString::Printf(TEXT("%s the aircraft is inbound"), *Pass));
+		Check(Controller->GetControlMode() == EEOControlMode::Operative,
+			FString::Printf(TEXT("%s the operative stays playable while it comes"), *Pass));
+
+		DistanceSample = Controller->GetExtractionDistance();
+		Check(DistanceSample > 50.f,
+			FString::Printf(TEXT("%s the aircraft starts a long way out (%.0fm)"),
+				*Pass, DistanceSample));
+
+		// Polled, not timed: the mission re-arms itself a few seconds after it
+		// completes, so a fixed dwell would sample the re-armed state instead.
+		Advance(EPhase::MissionPickup, 0.f);
+		break;
+	}
+
+	case EPhase::MissionPickup:
+	{
+		// Wait for the arrival, up to a generous bound.
+		if (Controller->IsExtractionInbound() && PhaseElapsed < 30.f)
+		{
+			return;
+		}
+
+		const FString Pass = FString::Printf(TEXT("run %d:"), MissionAttempt);
+
+		Check(!Controller->IsExtractionInbound(),
+			FString::Printf(TEXT("%s the extraction finishes"), *Pass));
+		Check(Controller->GetControlMode() == EEOControlMode::Aircraft,
+			FString::Printf(TEXT("%s the pickup returns control to the aircraft"), *Pass));
 		Check(Mission && Mission->GetMissionState() == EEOMissionState::Complete,
 			FString::Printf(TEXT("%s mission reaches Complete"), *Pass));
-		Check(Controller->GetControlMode() == EEOControlMode::Aircraft,
-			FString::Printf(TEXT("%s extraction returns the player to the aircraft"), *Pass));
+
+		// And the loop closes: the craft the player is handed back must fly.
+		if (APawn* Departing = GetAircraftPawn())
+		{
+			IEOAircraftControlInterface::Execute_SetFlightInput(Departing, FVector(1.f, 0.f, 0.f));
+		}
 
 		if (MissionAttempt >= 2)
 		{
-			Advance(EPhase::Done, 0.f);
+			Advance(EPhase::Done, 1.5f);
 			break;
 		}
 
@@ -1032,14 +1162,11 @@ void UEOSelfTest::Step()
 
 	case EPhase::Done:
 	default:
-		if (!IsGroundTest())
+		if (APawn* Plane = GetAircraftPawn())
 		{
-			if (APawn* Plane = GetAircraftPawn())
-			{
-				const float Speed = IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane);
-				Check(Speed > 100.f,
-					FString::Printf(TEXT("aircraft flies again after extraction (%.0f cm/s)"), Speed));
-			}
+			const float Speed = IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane);
+			Check(Speed > 100.f,
+				FString::Printf(TEXT("aircraft flies away after extraction (%.0f cm/s)"), Speed));
 		}
 		Finish();
 		break;

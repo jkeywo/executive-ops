@@ -64,8 +64,22 @@ public:
 
 	/**
 	 * Freeze the craft for the duration of the drop. The aircraft is parked, not
-	 * flying itself, until M7 gives it real behaviour.
+	 * flying itself.
 	 */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Aircraft|Deployment")
 	void SetDeploymentHold(bool bHeld);
+
+	/**
+	 * Fly to a point under the craft's own power, ignoring player input.
+	 *
+	 * Deliberately a single destination rather than navigation: a constrained
+	 * scripted arrival is what the extraction needs, and a general aircraft AI
+	 * is a much larger thing to get wrong.
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Aircraft|Extraction")
+	void SetScriptedDestination(const FVector& WorldLocation, bool bEnabled);
+
+	/** True once a scripted arrival has settled on its destination. */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Aircraft|Extraction")
+	bool HasReachedScriptedDestination() const;
 };
