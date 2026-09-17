@@ -54,6 +54,9 @@ void UEOInputConfig::BuildRuntimeInput()
 	JumpAction           = MakeAction(this, TEXT("IA_Jump"),           EInputActionValueType::Boolean);
 	SprintAction         = MakeAction(this, TEXT("IA_Sprint"),         EInputActionValueType::Boolean);
 	SlideAction          = MakeAction(this, TEXT("IA_Slide"),          EInputActionValueType::Boolean);
+	TakedownAction       = MakeAction(this, TEXT("IA_Takedown"),       EInputActionValueType::Boolean);
+	FireAction           = MakeAction(this, TEXT("IA_Fire"),           EInputActionValueType::Boolean);
+	AimAction            = MakeAction(this, TEXT("IA_Aim"),            EInputActionValueType::Boolean);
 
 	AircraftContext  = NewObject<UInputMappingContext>(this, TEXT("IMC_Aircraft"));
 	OperativeContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Operative"));
@@ -104,6 +107,10 @@ void UEOInputConfig::BuildDefaultMappings()
 	// key would both fire, so the decision lives in one handler instead.
 	OperativeContext->MapKey(SlideAction, EKeys::LeftControl);
 	OperativeContext->MapKey(SlideAction, EKeys::C);
+
+	OperativeContext->MapKey(TakedownAction, EKeys::F);
+	OperativeContext->MapKey(FireAction, EKeys::LeftMouseButton);
+	OperativeContext->MapKey(AimAction, EKeys::RightMouseButton);
 
 	OperativeContext->MapKey(LookAction, EKeys::Mouse2D).Modifiers.Add(MakeNegate(this, false, true, false));
 }

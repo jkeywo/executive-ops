@@ -74,6 +74,9 @@ Plugins/**/Intermediate/*
 # Cache files for the editor to use
 DerivedDataCache/*
 
+# Raw assets
+Raw/*
+
 # Licensed third-party animation packs (~1.2 GB).
 #
 # Excluded deliberately: they would exceed GitHub's free Git LFS quota, and they

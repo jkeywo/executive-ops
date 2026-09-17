@@ -69,6 +69,17 @@ private:
 		SlideCheck,
 		SlideConfirm,
 
+		// M5: the same encounter, five different outcomes.
+		GuardReset,
+		GuardPatrol,
+		GuardStealthKill,
+		GuardSeesPlayer,
+		GuardAlerted,
+		GuardShootsPlayer,
+		GuardGunKill,
+		GuardLosesPlayer,
+		GuardLostConfirm,
+
 		Done
 	};
 
@@ -92,6 +103,12 @@ private:
 
 	/** The possessed pawn as an operative, or null. */
 	class AEOOperativeCharacter* GetOperative() const;
+
+	/** The single guard in the level, or null. */
+	class AEOGuardCharacter* GetGuard() const;
+
+	/** Puts the operative and the guard back to a known, unaware starting state. */
+	void ResetEncounter();
 
 	void Check(bool bCondition, const FString& Description);
 	void Finish();

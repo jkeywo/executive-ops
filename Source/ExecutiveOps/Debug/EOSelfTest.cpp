@@ -2,6 +2,9 @@
 
 #include "Aircraft/EOAircraftPawn.h"
 #include "Character/EOOperativeCharacter.h"
+#include "Combat/EOGuardCharacter.h"
+#include "Combat/EOHealthComponent.h"
+#include "EngineUtils.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Interfaces/EODeployableInterface.h"
@@ -37,6 +40,38 @@ bool UEOSelfTest::IsGroundTest()
 AEOOperativeCharacter* UEOSelfTest::GetOperative() const
 {
 	return Controller ? Cast<AEOOperativeCharacter>(Controller->GetPawn()) : nullptr;
+}
+
+AEOGuardCharacter* UEOSelfTest::GetGuard() const
+{
+	if (!Controller || !Controller->GetWorld())
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AEOGuardCharacter> It(Controller->GetWorld()); It; ++It)
+	{
+		return *It;
+	}
+	return nullptr;
+}
+
+void UEOSelfTest::ResetEncounter()
+{
+	// Every outcome is tested against the SAME encounter, so each one starts from
+	// an identical, unaware state rather than inheriting the last test's mess.
+	if (AEOGuardCharacter* Guard = GetGuard())
+	{
+		Guard->ResetGuard();
+	}
+
+	if (AEOOperativeCharacter* Op = GetOperative())
+	{
+		if (UEOHealthComponent* OpHealth = Op->GetHealth())
+		{
+			OpHealth->Revive();
+		}
+	}
 }
 
 void UEOSelfTest::Check(bool bCondition, const FString& Description)
@@ -569,6 +604,250 @@ void UEOSelfTest::Step()
 			}
 		}
 
+		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M5: one guard --"));
+
+		// The traversal checks teleport the operative across the whole route, so
+		// the guard has almost certainly seen something by now. Start clean.
+		if (AEOOperativeCharacter* Clear = GetOperative())
+		{
+			Clear->SetActorLocation(FVector(0.f, 6000.f, 96.f), false, nullptr,
+				ETeleportType::TeleportPhysics);
+		}
+		ResetEncounter();
+		Advance(EPhase::GuardReset, 1.0f);
+		break;
+	}
+
+	case EPhase::GuardReset:
+	{
+		ResetEncounter();
+		Advance(EPhase::GuardPatrol, 0.5f);
+		break;
+	}
+
+	case EPhase::GuardPatrol:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		Check(Guard != nullptr, TEXT("the level has a guard"));
+
+		if (!Guard)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		Check(Guard->GetHealth() != nullptr, TEXT("guard has health"));
+		Check(Guard->GetGuardState() == EEOGuardState::Patrolling, TEXT("guard starts on patrol"));
+		Check(!Guard->IsDead(), TEXT("guard starts alive"));
+		Check(!Guard->CanSeeTarget(), TEXT("guard sees nothing with the player far away"));
+
+		DistanceSample = Guard->GetActorLocation().X;
+		Advance(EPhase::GuardStealthKill, 2.5f);
+		break;
+	}
+
+	// ---- Outcome 1: successful stealth kill ----------------------------------
+	case EPhase::GuardStealthKill:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		AEOOperativeCharacter* Op = GetOperative();
+		if (!Guard || !Op)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		Check(!FMath::IsNearlyEqual(Guard->GetActorLocation().X, DistanceSample, 20.f),
+			TEXT("guard walks its patrol"));
+		Check(Guard->GetDetectionAlpha() <= 0.f, TEXT("guard has not noticed anything"));
+
+		const FVector GuardLocation = Guard->GetActorLocation();
+		const FVector Behind = GuardLocation - Guard->GetActorForwardVector() * 130.f;
+		const FVector InFront = GuardLocation + Guard->GetActorForwardVector() * 130.f;
+
+		Op->SetActorLocation(InFront, false, nullptr, ETeleportType::TeleportPhysics);
+		Check(!Guard->CanBeTakenDownBy(Op), TEXT("cannot take down a guard from the front"));
+
+		Op->SetActorLocation(GuardLocation + Guard->GetActorRightVector() * 900.f,
+			false, nullptr, ETeleportType::TeleportPhysics);
+		Check(!Guard->CanBeTakenDownBy(Op), TEXT("cannot take down a guard from out of reach"));
+
+		Op->SetActorLocation(Behind, false, nullptr, ETeleportType::TeleportPhysics);
+		Check(Guard->CanBeTakenDownBy(Op), TEXT("can take down an unaware guard from behind"));
+		Check(Op->FindTakedownTarget() == Guard, TEXT("takedown finds the guard"));
+
+		Check(Op->TryTakedown(), TEXT("takedown succeeds"));
+		Check(Guard->IsDead(), TEXT("stealth kill kills the guard"));
+		Check(!Op->TryTakedown(), TEXT("cannot take down a corpse"));
+
+		// Stand clear before reviving: left where it is, the operative is right
+		// behind the guard and gets spotted the instant the guard comes back.
+		Op->SetActorLocation(FVector(0.f, 6000.f, 96.f), false, nullptr,
+			ETeleportType::TeleportPhysics);
+		ResetEncounter();
+		Advance(EPhase::GuardSeesPlayer, 0.6f);
+		break;
+	}
+
+	// ---- Outcome 2: botched stealth - the guard sees the player ---------------
+	case EPhase::GuardSeesPlayer:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		AEOOperativeCharacter* Op = GetOperative();
+		if (!Guard || !Op)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		Check(!Guard->IsDead(), TEXT("guard is alive again after a reset"));
+		Check(Guard->GetGuardState() == EEOGuardState::Patrolling,
+			TEXT("reset returns the guard to patrol"));
+
+		Op->SetActorLocation(Guard->GetActorLocation() + Guard->GetActorForwardVector() * 600.f,
+			false, nullptr, ETeleportType::TeleportPhysics);
+
+		Advance(EPhase::GuardAlerted, 1.6f);
+		break;
+	}
+
+	case EPhase::GuardAlerted:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		AEOOperativeCharacter* Op = GetOperative();
+		if (!Guard || !Op)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		Check(Guard->CanSeeTarget(), TEXT("guard sees a player standing in front of it"));
+		Check(Guard->GetDetectionAlpha() >= 1.f,
+			FString::Printf(TEXT("detection fills (%.2f)"), Guard->GetDetectionAlpha()));
+		Check(Guard->GetGuardState() == EEOGuardState::Alerted, TEXT("guard becomes alerted"));
+
+		// Being seen is what closes off the silent option.
+		Op->SetActorLocation(Guard->GetActorLocation() - Guard->GetActorForwardVector() * 130.f,
+			false, nullptr, ETeleportType::TeleportPhysics);
+		Check(!Guard->CanBeTakenDownBy(Op), TEXT("an alerted guard cannot be taken down"));
+
+		Op->SetActorLocation(Guard->GetActorLocation() + Guard->GetActorForwardVector() * 700.f,
+			false, nullptr, ETeleportType::TeleportPhysics);
+		SpeedSample = Op->GetHealth() ? Op->GetHealth()->GetHealth() : 0.f;
+
+		Advance(EPhase::GuardShootsPlayer, 3.0f);
+		break;
+	}
+
+	// ---- Outcome 3: short firefight, and the player can die -------------------
+	case EPhase::GuardShootsPlayer:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		AEOOperativeCharacter* Op = GetOperative();
+		if (!Guard || !Op || !Op->GetHealth())
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		Check(Op->GetHealth()->GetHealth() < SpeedSample,
+			FString::Printf(TEXT("guard shoots the player (%.0f -> %.0f health, guard %s, sees=%d, range=%.0f)"),
+				SpeedSample, Op->GetHealth()->GetHealth(),
+				*StaticEnum<EEOGuardState>()->GetNameStringByValue(
+					static_cast<int64>(Guard->GetGuardState())),
+				Guard->CanSeeTarget() ? 1 : 0,
+				FVector::Dist(Guard->GetActorLocation(), Op->GetActorLocation())));
+
+		// A mission that never started cannot fail, and the ground suite runs
+		// without one, so start it before testing the death consequence.
+		if (Mission && Mission->GetMissionState() == EEOMissionState::Inactive)
+		{
+			Mission->SelectDefaultSite();
+			Mission->StartMission();
+			Mission->BeginDeployment();
+			Mission->CompleteDeployment();
+		}
+
+		Op->GetHealth()->Kill(Guard);
+		Check(Op->IsDead(), TEXT("the player can be killed"));
+		Check(Mission && Mission->GetMissionState() == EEOMissionState::Failed,
+			TEXT("the player dying fails the mission"));
+
+		ResetEncounter();
+		if (Mission)
+		{
+			Mission->ResetMission();
+		}
+		Advance(EPhase::GuardGunKill, 0.5f);
+		break;
+	}
+
+	// ---- Outcome 4: gun kill --------------------------------------------------
+	case EPhase::GuardGunKill:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		AEOOperativeCharacter* Op = GetOperative();
+		if (!Guard || !Op || !Op->GetHealth() || !Guard->GetHealth())
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		Check(!Op->IsDead(), TEXT("the operative revives for the next attempt"));
+		Check(!Guard->IsDead(), TEXT("the guard revives for the next attempt"));
+
+		const float GuardStart = Guard->GetHealth()->GetHealth();
+
+		Op->SetActorLocation(Guard->GetActorLocation() + Guard->GetActorForwardVector() * 400.f,
+			false, nullptr, ETeleportType::TeleportPhysics);
+		Op->SetActorRotation((Guard->GetActorLocation() - Op->GetActorLocation()).Rotation());
+
+		// Fire the actual weapon, so the trace channel and the damage path are
+		// both exercised rather than assumed.
+		Check(Op->FireWeapon(), TEXT("the weapon fires"));
+		Check(Guard->GetHealth()->GetHealth() < GuardStart,
+			FString::Printf(TEXT("a real shot damages the guard (%.0f -> %.0f)"),
+				GuardStart, Guard->GetHealth()->GetHealth()));
+		Check(!Guard->IsDead(), TEXT("one pistol hit does not kill"));
+
+		Guard->GetHealth()->ApplyDamage(55.f, Op);
+		Check(Guard->IsDead(), TEXT("two pistol hits kill the guard"));
+		Check(Guard->GetHealth()->ApplyDamage(55.f, Op) == 0.f,
+			TEXT("a corpse takes no further damage"));
+
+		ResetEncounter();
+		Advance(EPhase::GuardLosesPlayer, 0.5f);
+		break;
+	}
+
+	// ---- Outcome 5: break contact ---------------------------------------------
+	case EPhase::GuardLosesPlayer:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		AEOOperativeCharacter* Op = GetOperative();
+		if (!Guard || !Op)
+		{
+			Advance(EPhase::Done, 0.f);
+			break;
+		}
+
+		SpeedSample = Guard->GetDetectionAlpha();
+		Op->SetActorLocation(FVector(0.f, 8000.f, 96.f), false, nullptr, ETeleportType::TeleportPhysics);
+
+		// Perception is evaluated on the guard's tick, so the result of a teleport
+		// cannot be read in the same frame.
+		Advance(EPhase::GuardLostConfirm, 1.0f);
+		break;
+	}
+
+	case EPhase::GuardLostConfirm:
+	{
+		AEOGuardCharacter* Guard = GetGuard();
+		if (Guard)
+		{
+			Check(!Guard->CanSeeTarget(), TEXT("guard cannot see a player who has broken contact"));
+			Check(Guard->GetDetectionAlpha() < 1.f, TEXT("awareness decays once contact is broken"));
+		}
 		Advance(EPhase::Done, 0.f);
 		break;
 	}

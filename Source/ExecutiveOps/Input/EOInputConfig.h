@@ -72,6 +72,15 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
 	TObjectPtr<UInputAction> SlideAction;
 
+	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
+	TObjectPtr<UInputAction> TakedownAction;
+
+	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
+	TObjectPtr<UInputAction> FireAction;
+
+	UPROPERTY(VisibleAnywhere, Category = "Input|Operative")
+	TObjectPtr<UInputAction> AimAction;
+
 private:
 	/** Builds the two mapping contexts with keyboard/mouse defaults. */
 	void BuildDefaultMappings();

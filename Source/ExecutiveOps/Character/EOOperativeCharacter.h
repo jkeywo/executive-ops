@@ -8,6 +8,8 @@
 class UAnimSequence;
 class UCameraComponent;
 class UEOTraversalComponent;
+class UEOHealthComponent;
+class AEOGuardCharacter;
 class USpringArmComponent;
 class UEOInputConfig;
 struct FInputActionValue;
@@ -54,6 +56,15 @@ protected:
 	void Input_SprintStop(const FInputActionValue& Value);
 	void Input_SlideStart(const FInputActionValue& Value);
 	void Input_SlideStop(const FInputActionValue& Value);
+	void Input_Takedown(const FInputActionValue& Value);
+	void Input_Fire(const FInputActionValue& Value);
+	void Input_AimStart(const FInputActionValue& Value);
+	void Input_AimStop(const FInputActionValue& Value);
+
+	UFUNCTION()
+	void HandleDied(AActor* Killer);
+
+	void TickCombat(float DeltaSeconds);
 
 	/** Chooses and plays the locomotion clip that matches what the body is doing. */
 	void UpdateLocomotionAnimation();
@@ -68,6 +79,44 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
 	TObjectPtr<UEOTraversalComponent> Traversal;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<UEOHealthComponent> Health;
+
+	// ---- Weapon: one pistol, kept deliberately simple ------------------------
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	float WeaponDamage = 55.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	float WeaponRange = 8000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	float WeaponInterval = 0.28f;
+
+	/** Hip spread in degrees. Aiming removes it, which is the only reason to aim. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	float HipSpread = 4.5f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
+	float AimSpread = 0.4f;
+
+	// ---- Takedown ------------------------------------------------------------
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Takedown")
+	float TakedownDuration = 0.7f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimSequence> TakedownAnim;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimSequence> AimAnim;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimSequence> FireAnim;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimSequence> DeathAnim;
 
 	// ---- Slide ----------------------------------------------------------------
 
@@ -168,6 +217,40 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void StopSlide();
 
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	UEOHealthComponent* GetHealth() const { return Health; }
+
+	/** The guard currently positioned for a silent kill, if any. */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	AEOGuardCharacter* FindTakedownTarget() const;
+
+	/** Kill a valid takedown target. Returns false if there is not one. */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool TryTakedown();
+
+	/** Hitscan from the camera. Returns true if a shot was actually fired. */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	bool FireWeapon();
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsAiming() const { return bAiming; }
+
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsDead() const;
+
+	/**
+	 * Return to a live, controllable state after death.
+	 *
+	 * Reviving health alone is not enough: the death path disables movement, so
+	 * a revived operative would stand frozen in its death pose forever.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void ResetOperative();
+
+	/** True during the takedown animation, when the player is committed. */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	bool IsPerformingTakedown() const { return TakedownRemaining > 0.f; }
+
 private:
 	const UEOInputConfig* GetInputConfig() const;
 
@@ -188,6 +271,10 @@ private:
 	/** Movement settings restored when the slide ends. */
 	float CachedGroundFriction = 8.f;
 	float CachedBrakingDeceleration = 2000.f;
+
+	bool bAiming = false;
+	float FireCooldown = 0.f;
+	float TakedownRemaining = 0.f;
 
 	/** The clip currently playing, so the same one is not restarted every frame. */
 	UPROPERTY(Transient)

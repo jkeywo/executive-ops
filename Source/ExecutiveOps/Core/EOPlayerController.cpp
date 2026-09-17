@@ -3,6 +3,8 @@
 #include "Aircraft/EOAircraftPawn.h"
 #include "Character/EOOperativeCharacter.h"
 #include "Character/EOTraversalComponent.h"
+#include "Combat/EOGuardCharacter.h"
+#include "EngineUtils.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EngineUtils.h"
@@ -398,12 +400,17 @@ void AEOPlayerController::EOReset()
 		// running and drag the operative back across the level, or fire
 		// CompleteDeployment against a mission that just reset.
 		Operative->CancelDeploymentDrop();
-		if (UEOTraversalComponent* Traverse = Operative->GetTraversal())
-		{
-			Traverse->Cancel();
-		}
+
+		// Revives and restores movement. Without it a player killed by the guard
+		// resets into a corpse they still control and can never play again.
+		Operative->ResetOperative();
 		Operative->SetActorTransform(OperativeStartTransform);
-		Operative->GetCharacterMovement()->StopMovementImmediately();
+	}
+
+	// Guards come back too, or the second run of a mission has nothing in it.
+	for (TActorIterator<AEOGuardCharacter> It(GetWorld()); It; ++It)
+	{
+		It->ResetGuard();
 	}
 
 	if (UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())

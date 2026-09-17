@@ -4,6 +4,10 @@
 #include "Engine/Engine.h"
 #include "Core/EOPlayerController.h"
 #include "Aircraft/EOAircraftPawn.h"
+#include "Character/EOOperativeCharacter.h"
+#include "Combat/EOGuardCharacter.h"
+#include "Combat/EOHealthComponent.h"
+#include "EngineUtils.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Mission/EOMissionSubsystem.h"
 
@@ -79,6 +83,57 @@ void AEODebugHUD::DrawHUD()
 		DrawTextLine(FString::Printf(TEXT("Deploy:   %s"),
 			Blocker.IsEmpty() ? TEXT("READY [F]") : *Blocker), Y,
 			Blocker.IsEmpty() ? FLinearColor::Green : FLinearColor(0.6f, 0.6f, 0.6f));
+	}
+	else if (const AEOOperativeCharacter* Operative = Cast<AEOOperativeCharacter>(Pawn))
+	{
+		DrawTextLine(FString::Printf(TEXT("Speed:    %.0f cm/s"), Pawn->GetVelocity().Size()), Y);
+
+		if (const UEOHealthComponent* OperativeHealth = Operative->GetHealth())
+		{
+			const float Fraction = OperativeHealth->GetHealthFraction();
+			const int32 Filled = FMath::RoundToInt(Fraction * 10.f);
+			const FString Bar = FString::ChrN(Filled, TEXT('=')) + FString::ChrN(10 - Filled, TEXT('.'));
+
+			DrawTextLine(FString::Printf(TEXT("Health:   [%s] %.0f"), *Bar, OperativeHealth->GetHealth()), Y,
+				OperativeHealth->IsDead() ? FLinearColor::Red
+					: (Fraction < 0.4f ? FLinearColor(1.f, 0.5f, 0.1f) : FLinearColor::White));
+		}
+
+		if (Operative->IsAiming())
+		{
+			DrawTextLine(TEXT("Weapon:   AIMING"), Y, FLinearColor(0.2f, 0.9f, 1.f));
+		}
+
+		// The takedown prompt is driven by the same test the action uses, so it
+		// can never offer a kill the input would then refuse.
+		if (Operative->FindTakedownTarget())
+		{
+			DrawTextLine(TEXT("TAKEDOWN [F]"), Y, FLinearColor::Green);
+		}
+
+		// Guard awareness: what the player needs to read to know if they are
+		// getting away with it.
+		for (TActorIterator<AEOGuardCharacter> It(GetWorld()); It; ++It)
+		{
+			const AEOGuardCharacter* Guard = *It;
+			if (!Guard)
+			{
+				continue;
+			}
+
+			const FString StateName = StaticEnum<EEOGuardState>()
+				->GetNameStringByValue(static_cast<int64>(Guard->GetGuardState()));
+
+			const int32 Filled = FMath::RoundToInt(Guard->GetDetectionAlpha() * 10.f);
+			const FString Bar = FString::ChrN(Filled, TEXT('!')) + FString::ChrN(10 - Filled, TEXT('.'));
+
+			FLinearColor Colour = FLinearColor(0.6f, 0.6f, 0.6f);
+			if (Guard->IsDead())					{ Colour = FLinearColor(0.4f, 0.4f, 0.4f); }
+			else if (Guard->GetGuardState() == EEOGuardState::Alerted)	{ Colour = FLinearColor::Red; }
+			else if (Guard->GetDetectionAlpha() > 0.f)					{ Colour = FLinearColor::Yellow; }
+
+			DrawTextLine(FString::Printf(TEXT("Guard:    %-11s [%s]"), *StateName, *Bar), Y, Colour);
+		}
 	}
 	else if (Pawn)
 	{

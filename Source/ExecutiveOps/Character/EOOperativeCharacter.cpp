@@ -3,6 +3,9 @@
 #include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
 #include "Character/EOTraversalComponent.h"
+#include "Combat/EOGuardCharacter.h"
+#include "Combat/EOHealthComponent.h"
+#include "EngineUtils.h"
 #include "Components/CapsuleComponent.h"
 #include "EnhancedInputComponent.h"
 #include "ExecutiveOps.h"
@@ -48,6 +51,7 @@ AEOOperativeCharacter::AEOOperativeCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 
 	Traversal = CreateDefaultSubobject<UEOTraversalComponent>(TEXT("Traversal"));
+	Health = CreateDefaultSubobject<UEOHealthComponent>(TEXT("Health"));
 
 	PrimaryActorTick.bCanEverTick = true;
 }
@@ -64,12 +68,227 @@ void AEOOperativeCharacter::BeginPlay()
 		Movement->GetNavAgentPropertiesRef().bCanCrouch = true;
 		Movement->MaxWalkSpeedCrouched = SlideImpulse;
 	}
+
+	if (Health)
+	{
+		Health->OnDied.AddDynamic(this, &AEOOperativeCharacter::HandleDied);
+	}
+}
+
+// --------------------------------------------------------------------- combat
+
+bool AEOOperativeCharacter::IsDead() const
+{
+	return Health && Health->IsDead();
+}
+
+AEOGuardCharacter* AEOOperativeCharacter::FindTakedownTarget() const
+{
+	UWorld* World = GetWorld();
+	if (!World || IsDead())
+	{
+		return nullptr;
+	}
+
+	AEOGuardCharacter* Best = nullptr;
+	float BestDistanceSq = TNumericLimits<float>::Max();
+
+	// The guard owns the rules for whether it can be taken down; this only picks
+	// the nearest one that says yes.
+	for (TActorIterator<AEOGuardCharacter> It(World); It; ++It)
+	{
+		AEOGuardCharacter* Guard = *It;
+		if (!Guard || !Guard->CanBeTakenDownBy(this))
+		{
+			continue;
+		}
+
+		const float DistanceSq = FVector::DistSquared(Guard->GetActorLocation(), GetActorLocation());
+		if (DistanceSq < BestDistanceSq)
+		{
+			BestDistanceSq = DistanceSq;
+			Best = Guard;
+		}
+	}
+
+	return Best;
+}
+
+bool AEOOperativeCharacter::TryTakedown()
+{
+	if (!HasControl() || IsDead() || IsPerformingTakedown())
+	{
+		return false;
+	}
+
+	AEOGuardCharacter* Victim = FindTakedownTarget();
+	if (!Victim)
+	{
+		return false;
+	}
+
+	// Face the kill, so the animation does not play sideways.
+	const FVector ToVictim = Victim->GetActorLocation() - GetActorLocation();
+	SetActorRotation(FRotator(0.f, ToVictim.Rotation().Yaw, 0.f));
+
+	Victim->Takedown(this);
+
+	TakedownRemaining = TakedownDuration;
+	if (TakedownAnim)
+	{
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
+		{
+			MeshComp->PlayAnimation(TakedownAnim, false);
+			CurrentAnim = TakedownAnim;
+		}
+	}
+
+	UE_LOG(LogExecutiveOps, Log, TEXT("Takedown on %s."), *Victim->GetName());
+	return true;
+}
+
+bool AEOOperativeCharacter::FireWeapon()
+{
+	if (!HasControl() || IsDead() || IsPerformingTakedown() || FireCooldown > 0.f)
+	{
+		return false;
+	}
+
+	if (Traversal && Traversal->IsTraversing())
+	{
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World || !FollowCamera)
+	{
+		return false;
+	}
+
+	FireCooldown = WeaponInterval;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(EOOperativeShot), false, this);
+
+	// Two stages: the camera decides WHAT is being aimed at, the body decides
+	// whether the shot can actually get there. Firing straight from the camera
+	// lets the player hit things from behind cover their character is fully
+	// hidden by, and clip corners their crosshair is nowhere near.
+	const FVector CameraStart = FollowCamera->GetComponentLocation();
+	const FVector CameraAim = FollowCamera->GetForwardVector();
+
+	FHitResult CameraHit;
+	// ECC_Pawn throughout: the default Pawn profile ignores Visibility, so a
+	// Visibility trace passes clean through anything worth shooting.
+	const FVector AimPoint = World->LineTraceSingleByChannel(CameraHit, CameraStart,
+		CameraStart + CameraAim * WeaponRange, ECC_Pawn, Params)
+		? CameraHit.ImpactPoint
+		: CameraStart + CameraAim * WeaponRange;
+
+	const FVector Muzzle = GetActorLocation() + FVector(0.f, 0.f, 40.f);
+	const FVector Direction = FMath::VRandCone(
+		(AimPoint - Muzzle).GetSafeNormal(),
+		FMath::DegreesToRadians(bAiming ? AimSpread : HipSpread));
+
+	FHitResult Hit;
+	if (World->LineTraceSingleByChannel(Hit, Muzzle, Muzzle + Direction * WeaponRange,
+		ECC_Pawn, Params))
+	{
+		if (AActor* HitActor = Hit.GetActor())
+		{
+			if (UEOHealthComponent* HitHealth = HitActor->FindComponentByClass<UEOHealthComponent>())
+			{
+				HitHealth->ApplyDamage(WeaponDamage, this);
+			}
+		}
+	}
+
+	if (FireAnim)
+	{
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
+		{
+			MeshComp->PlayAnimation(FireAnim, false);
+			CurrentAnim = FireAnim;
+		}
+	}
+
+	return true;
+}
+
+void AEOOperativeCharacter::HandleDied(AActor* Killer)
+{
+	UE_LOG(LogExecutiveOps, Log, TEXT("Operative killed by %s."), *GetNameSafe(Killer));
+
+	StopSlide();
+	if (Traversal)
+	{
+		Traversal->Cancel();
+	}
+
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+		Movement->DisableMovement();
+	}
+
+	if (DeathAnim)
+	{
+		if (USkeletalMeshComponent* MeshComp = GetMesh())
+		{
+			MeshComp->PlayAnimation(DeathAnim, false);
+			CurrentAnim = DeathAnim;
+		}
+	}
+
+	// A dead operative is a failed mission. M6 decides what happens next.
+	if (UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())
+	{
+		Mission->FailMission();
+	}
+}
+
+void AEOOperativeCharacter::ResetOperative()
+{
+	if (Traversal)
+	{
+		Traversal->Cancel();
+	}
+	StopSlide();
+	UnCrouch();
+
+	bSprinting = false;
+	bAiming = false;
+	FireCooldown = 0.f;
+	TakedownRemaining = 0.f;
+	CurrentAnim = nullptr;
+
+	if (Health)
+	{
+		Health->Revive();
+	}
+
+	// The death path disabled movement; reviving the health component does not
+	// undo that, so without this the operative comes back alive but frozen.
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->SetMovementMode(MOVE_Walking);
+		Movement->StopMovementImmediately();
+		Movement->MaxWalkSpeed = WalkSpeed;
+	}
+
+	SetActorEnableCollision(true);
+}
+
+void AEOOperativeCharacter::TickCombat(float DeltaSeconds)
+{
+	FireCooldown = FMath::Max(FireCooldown - DeltaSeconds, 0.f);
+	TakedownRemaining = FMath::Max(TakedownRemaining - DeltaSeconds, 0.f);
 }
 
 void AEOOperativeCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	TickCombat(DeltaSeconds);
 	TickSlide(DeltaSeconds);
 	UpdateLocomotionAnimation();
 }
@@ -190,7 +409,28 @@ void AEOOperativeCharacter::UpdateLocomotionAnimation()
 	UAnimSequence* Wanted = nullptr;
 	bool bLoop = true;
 
-	if (bSliding)
+	// Death holds its final pose; the takedown and the shot are one-shots that
+	// must be allowed to finish before locomotion takes the mesh back.
+	if (IsDead())
+	{
+		return;
+	}
+
+	if (IsPerformingTakedown())
+	{
+		return;
+	}
+
+	if (CurrentAnim == FireAnim && FireAnim && MeshComp->IsPlaying())
+	{
+		return;
+	}
+
+	if (bAiming && !bSliding && !Movement->IsFalling())
+	{
+		Wanted = AimAnim ? AimAnim : IdleAnim;
+	}
+	else if (bSliding)
 	{
 		Wanted = SlideAnim;
 	}
@@ -253,6 +493,10 @@ void AEOOperativeCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	Input->BindAction(Config->SprintAction, ETriggerEvent::Completed, this, &AEOOperativeCharacter::Input_SprintStop);
 	Input->BindAction(Config->SlideAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_SlideStart);
 	Input->BindAction(Config->SlideAction, ETriggerEvent::Completed, this, &AEOOperativeCharacter::Input_SlideStop);
+	Input->BindAction(Config->TakedownAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_Takedown);
+	Input->BindAction(Config->FireAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_Fire);
+	Input->BindAction(Config->AimAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_AimStart);
+	Input->BindAction(Config->AimAction, ETriggerEvent::Completed, this, &AEOOperativeCharacter::Input_AimStop);
 }
 
 void AEOOperativeCharacter::Input_Move(const FInputActionValue& Value)
@@ -264,8 +508,10 @@ void AEOOperativeCharacter::Input_Move(const FInputActionValue& Value)
 	}
 
 	// The traversal drives the capsule directly; letting the movement component
-	// also act on input makes the two fight over the same transform.
-	if (Traversal && Traversal->IsTraversing())
+	// also act on input makes the two fight over the same transform. The takedown
+	// is likewise a commitment - running out of one slides the operative across
+	// the floor in the strike pose.
+	if ((Traversal && Traversal->IsTraversing()) || IsPerformingTakedown())
 	{
 		return;
 	}
@@ -337,7 +583,7 @@ void AEOOperativeCharacter::Input_SprintStop(const FInputActionValue& Value)
 
 void AEOOperativeCharacter::Input_SlideStart(const FInputActionValue& Value)
 {
-	if (!HasControl())
+	if (!HasControl() || IsDead())
 	{
 		return;
 	}
@@ -346,6 +592,26 @@ void AEOOperativeCharacter::Input_SlideStart(const FInputActionValue& Value)
 	{
 		Crouch();
 	}
+}
+
+void AEOOperativeCharacter::Input_Takedown(const FInputActionValue& Value)
+{
+	TryTakedown();
+}
+
+void AEOOperativeCharacter::Input_Fire(const FInputActionValue& Value)
+{
+	FireWeapon();
+}
+
+void AEOOperativeCharacter::Input_AimStart(const FInputActionValue& Value)
+{
+	bAiming = HasControl();
+}
+
+void AEOOperativeCharacter::Input_AimStop(const FInputActionValue& Value)
+{
+	bAiming = false;
 }
 
 void AEOOperativeCharacter::Input_SlideStop(const FInputActionValue& Value)
@@ -372,6 +638,9 @@ void AEOOperativeCharacter::SetStowed_Implementation(bool bInStowed)
 		// Nothing about the last insertion should carry into the next one.
 		StopSlide();
 		bSprinting = false;
+		bAiming = false;
+		FireCooldown = 0.f;
+		TakedownRemaining = 0.f;
 		CurrentAnim = nullptr;
 		UnCrouch();
 	}
@@ -396,6 +665,7 @@ void AEOOperativeCharacter::UnPossessed()
 	// Clearing the mapping context can tear down an in-progress action without a
 	// Completed event, which would otherwise leave the operative sprinting forever.
 	bSprinting = false;
+	bAiming = false;
 	StopSlide();
 	UnCrouch();
 

@@ -35,6 +35,23 @@ ANIMS = {
     "SlideAnim":  OWA + "/Slide/Slide_Idle",
 }
 
+GUARD_ANIMS = {
+    "IdleAnim":      OWA + "/Idles/Idle",
+    "WalkAnim":      OWA + "/FMotion/Walk/FMotion_Walk_Fast_Loop",
+    "AimAnim":       OWA + "/Pistol/Pistol_aim_Idle",
+    "FireAnim":      OWA + "/Pistol/Pistol_shoot_01",
+    "HitReactAnim":  OWA + "/FMotion/Injured/FMotion_Injured_Idle",
+    "DeathAnim":     OWA + "/Deaths/death_aim_back_01",
+}
+
+COMBAT_ANIMS = {
+    "AimAnim":      OWA + "/Pistol/Pistol_aim_Idle",
+    "FireAnim":     OWA + "/Pistol/Pistol_shoot_01",
+    "DeathAnim":    OWA + "/Deaths/death_aim_chest_01",
+    # No bespoke assassination in the packs; one contextual strike is enough.
+    "TakedownAnim": OWA + "/NPC/Anim_TA_ANG_hit_fist",
+}
+
 TRAVERSAL_ANIMS = {
     "VaultAnim":  OWA + "/Vault/Vault_jog",
     "MantleAnim": OWA + "/Ledge/High_Ledge_Up_Crouch",
@@ -70,6 +87,7 @@ def create_blueprints():
     unreal.EditorAssetLibrary.make_directory(BP)
 
     aircraft = make_blueprint(BP + "/BP_Aircraft", unreal.EOAircraftPawn)
+    guard = make_blueprint(BP + "/BP_Guard", unreal.EOGuardCharacter)
     operative = make_blueprint(BP + "/BP_Operative", unreal.EOOperativeCharacter)
     controller = make_blueprint(BP + "/BP_PlayerController", unreal.EOPlayerController)
     gamemode = make_blueprint(BP + "/BP_GameMode", unreal.EOGameModeBase)
@@ -127,6 +145,7 @@ def create_blueprints():
         mesh.set_editor_property("animation_mode", unreal.AnimationMode.ANIMATION_SINGLE_NODE)
 
         assign_anims(cdo, ANIMS)
+        assign_anims(cdo, COMBAT_ANIMS)
         assign_anims(cdo.get_editor_property("Traversal"), TRAVERSAL_ANIMS)
 
     def cfg_controller(cdo):
@@ -137,13 +156,34 @@ def create_blueprints():
         cdo.set_editor_property("player_controller_class", controller.generated_class())
         cdo.set_editor_property("default_pawn_class", operative.generated_class())
 
+    def cfg_guard(cdo):
+        mesh = cdo.get_editor_property("Mesh")
+        sk = unreal.load_asset(SK_MESH)
+        if sk:
+            mesh.set_skeletal_mesh_asset(sk)
+        mesh.set_editor_property("relative_location", unreal.Vector(0.0, 0.0, -96.0))
+        mesh.set_editor_property("relative_rotation", unreal.Rotator(0.0, 0.0, -90.0))
+        mesh.set_editor_property("animation_mode", unreal.AnimationMode.ANIMATION_SINGLE_NODE)
+
+        assign_anims(cdo, GUARD_ANIMS)
+
+        # A there-and-back patrol across the objective approach, so the player
+        # meets the guard whichever way they come in.
+        cdo.set_editor_property("PatrolOffsets", [
+            unreal.Vector(0.0, 0.0, 0.0),
+            unreal.Vector(1400.0, 0.0, 0.0),
+            unreal.Vector(1400.0, 1200.0, 0.0),
+            unreal.Vector(0.0, 1200.0, 0.0),
+        ])
+
+    set_defaults(guard, cfg_guard)
     set_defaults(aircraft, cfg_aircraft)
     set_defaults(operative, cfg_operative)
     set_defaults(controller, cfg_controller)
     set_defaults(gamemode, cfg_gamemode)
 
     log("blueprints configured")
-    return aircraft, operative, controller, gamemode
+    return aircraft, operative, controller, gamemode, guard
 
 
 # ---------------------------------------------------------------- level build
@@ -302,7 +342,7 @@ def build_flight_map():
     log("built L_FlightTest: {} actors".format(len(EAS.get_all_level_actors())))
 
 
-def build_mission_map():
+def build_mission_map(guard_bp=None):
     """
     M4's ground movement route: every traversal verb the milestone asks for, laid
     out as a short circuit that can be run repeatedly.
@@ -366,6 +406,16 @@ def build_mission_map():
         block(9000 - i * 900, 2400, 40 + i * 60, 4, 4, 0.8 + i * 1.2,
               "Stair_{}".format(i))
 
+    # --- The guard ----------------------------------------------------------
+    # Placed past the slide gap, patrolling across the approach to the mantle
+    # ledge, so the player meets it mid-route with several ways to handle it:
+    # sneak up behind, shoot it, or slide past and keep going.
+    if guard_bp:
+        guard = EAS.spawn_actor_from_class(
+            guard_bp.generated_class(), unreal.Vector(3900, -600, 100),
+            unreal.Rotator(0, 90, 0))
+        guard.set_actor_label("Guard")
+
     start = EAS.spawn_actor_from_class(
         unreal.PlayerStart, unreal.Vector(0, 0, 200), unreal.Rotator(0, 0, 0))
     start.set_actor_label("PlayerStart")
@@ -422,8 +472,13 @@ def verify():
 
     for path in [MAPS + "/L_FlightTest", MAPS + "/L_MissionTest",
                  BP + "/BP_Aircraft", BP + "/BP_Operative",
-                 BP + "/BP_PlayerController", BP + "/BP_GameMode"]:
+                 BP + "/BP_PlayerController", BP + "/BP_GameMode", BP + "/BP_Guard"]:
         check(EAL.does_asset_exist(path), "asset exists: " + path)
+
+    if ELAS.load_level(MAPS + "/L_MissionTest"):
+        guards = [a for a in EAS.get_all_level_actors()
+                  if isinstance(a, unreal.EOGuardCharacter)]
+        check(len(guards) == 1, "L_MissionTest has exactly 1 guard (found {})".format(len(guards)))
 
     # Existence is not enough - load each map and confirm it actually has content.
     for path, min_actors in [(MAPS + "/L_MissionTest", 20), (MAPS + "/L_FlightTest", 40)]:
@@ -484,9 +539,9 @@ def main():
     log("starting M0 setup")
     unreal.EditorAssetLibrary.make_directory(MAPS)
 
-    aircraft, operative, controller, gamemode = create_blueprints()
+    aircraft, operative, controller, gamemode, guard = create_blueprints()
 
-    build_mission_map()
+    build_mission_map(guard)
     build_flight_map()
     place_pawns_in_flight_map(aircraft)
 
