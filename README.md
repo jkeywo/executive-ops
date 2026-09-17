@@ -85,6 +85,11 @@ UnrealEditor-Cmd.exe ExecutiveOps.uproject /Game/Maps/L_FlightTest -game -nullrh
 | Fire / Aim | — | `LMB` / `RMB` |
 | Interact | — | `E` (objective, extraction) |
 
+Holding aim swaps the ground control scheme: the operative's body locks to the
+camera, so the mouse points them directly and `A`/`D` strafe instead of turning.
+With aim released the body steers itself and the camera eases round behind the
+direction of travel once the mouse stops moving.
+
 Bindings are declared in C++ in [`EOInputConfig.cpp`](Source/ExecutiveOps/Input/EOInputConfig.cpp)
 rather than as `.uasset` files, so a fresh clone is playable with no content to import.
 

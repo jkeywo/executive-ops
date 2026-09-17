@@ -80,6 +80,19 @@ protected:
 
 	void TickSlide(float DeltaSeconds);
 
+	/**
+	 * Eases the view round behind the direction of travel once the player stops
+	 * steering it. Without this the operative turns to face a strafe and runs off
+	 * sideways while the camera stares at where they used to be.
+	 */
+	void UpdateFollowCamera(float DeltaSeconds);
+
+	/** Switches between the free-movement and aiming control schemes. */
+	void SetAiming(bool bNewAiming);
+
+	/** Suspends the auto-follow for a moment after any deliberate look input. */
+	void MarkLookInput(const FVector2D& Axis);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
 
@@ -168,6 +181,24 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement|Animation")
 	TObjectPtr<UAnimSequence> SlideAnim;
+
+	// ---- Follow camera ---------------------------------------------------------
+
+	/** Degrees per second the view swings behind the heading, at full sprint. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0"))
+	float CameraFollowRate = 110.f;
+
+	/** Below this speed the operative is shuffling, and the camera stays put. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0"))
+	float CameraFollowMinSpeed = 180.f;
+
+	/** Degrees of slack around the heading, so the view does not hunt. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0"))
+	float CameraFollowDeadZone = 6.f;
+
+	/** Seconds the auto-follow stays out of the way after a look input. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0"))
+	float LookHoldTime = 0.6f;
 
 	/** Vertical impact speed above which a landing counts as hard. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0"))
@@ -306,6 +337,7 @@ private:
 	float CachedBrakingDeceleration = 2000.f;
 
 	bool bAiming = false;
+	float LookHoldRemaining = 0.f;
 	float FireCooldown = 0.f;
 	float TakedownRemaining = 0.f;
 

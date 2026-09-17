@@ -34,7 +34,11 @@ AEOOperativeCharacter::AEOOperativeCharacter()
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->bOrientRotationToMovement = true;
-	Movement->RotationRate = FRotator(0.f, 640.f, 0.f);
+
+	// Fast enough that a direction change reads as the operative turning, not as
+	// the operative deciding whether to. At 640 the body was still swinging round
+	// long after the player had committed to the new direction.
+	Movement->RotationRate = FRotator(0.f, 1600.f, 0.f);
 	Movement->MaxWalkSpeed = WalkSpeed;
 	Movement->JumpZVelocity = 550.f;
 	Movement->AirControl = 0.35f;
@@ -49,6 +53,13 @@ AEOOperativeCharacter::AEOOperativeCharacter()
 	CameraBoom->TargetArmLength = 350.f;
 	CameraBoom->SocketOffset = FVector(0.f, 55.f, 70.f);
 	CameraBoom->bUsePawnControlRotation = true;
+
+	// Light positional lag only. The boom trails the capsule slightly so footfalls
+	// and slides do not transmit straight into the view; rotation is left rigid
+	// because the mouse must stay exact.
+	CameraBoom->bEnableCameraLag = true;
+	CameraBoom->CameraLagSpeed = 18.f;
+	CameraBoom->CameraLagMaxDistance = 60.f;
 
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
@@ -404,7 +415,7 @@ void AEOOperativeCharacter::ResetOperative()
 	UnCrouch();
 
 	bSprinting = false;
-	bAiming = false;
+	SetAiming(false);
 	FireCooldown = 0.f;
 	TakedownRemaining = 0.f;
 	CurrentAnim = nullptr;
@@ -438,7 +449,57 @@ void AEOOperativeCharacter::Tick(float DeltaSeconds)
 
 	TickCombat(DeltaSeconds);
 	TickSlide(DeltaSeconds);
+	UpdateFollowCamera(DeltaSeconds);
 	UpdateLocomotionAnimation();
+}
+
+void AEOOperativeCharacter::UpdateFollowCamera(float DeltaSeconds)
+{
+	LookHoldRemaining = FMath::Max(0.f, LookHoldRemaining - DeltaSeconds);
+
+	AController* OwningController = GetController();
+	if (!OwningController || DeltaSeconds <= 0.f)
+	{
+		return;
+	}
+
+	// Aiming hands the camera to the mouse outright, and a traversal is already
+	// driving the capsule along an authored arc - swinging the view during either
+	// would be the camera arguing with the player.
+	if (bAiming || LookHoldRemaining > 0.f || !HasControl())
+	{
+		return;
+	}
+
+	if (Traversal && Traversal->IsTraversing())
+	{
+		return;
+	}
+
+	const FVector Flat = FVector(GetVelocity().X, GetVelocity().Y, 0.f);
+	const float Speed = Flat.Size();
+	if (Speed < CameraFollowMinSpeed)
+	{
+		return;
+	}
+
+	const FRotator Control = OwningController->GetControlRotation();
+	const float Delta = FRotator::NormalizeAxis(Flat.Rotation().Yaw - Control.Yaw);
+
+	// A dead zone, or the camera hunts around the exact heading forever and the
+	// whole view develops a permanent low-level wobble.
+	if (FMath::Abs(Delta) < CameraFollowDeadZone)
+	{
+		return;
+	}
+
+	// Faster the quicker the operative is going: a walk should barely drag the
+	// camera round, a sprint should put it behind them promptly.
+	const float SpeedAlpha = FMath::Clamp(Speed / FMath::Max(SprintSpeed, 1.f), 0.f, 1.f);
+	const float MaxStep = CameraFollowRate * SpeedAlpha * DeltaSeconds;
+
+	OwningController->SetControlRotation(FRotator(Control.Pitch,
+		Control.Yaw + FMath::Clamp(Delta, -MaxStep, MaxStep), Control.Roll));
 }
 
 // ---------------------------------------------------------------------- slide
@@ -693,8 +754,15 @@ void AEOOperativeCharacter::Input_Look(const FInputActionValue& Value)
 	}
 
 	const FVector2D Axis = Value.Get<FVector2D>();
+
+	// AddControllerPitchInput subtracts from pitch, and Mouse2D reports +Y when
+	// the mouse moves up, so the raw axis looks down when pushed up. Negated here
+	// rather than in the mapping so the config's bInvertMouseY keeps meaning
+	// "invert relative to standard" for both pawns.
 	AddControllerYawInput(Axis.X * LookSensitivity);
-	AddControllerPitchInput(Axis.Y * LookSensitivity);
+	AddControllerPitchInput(-Axis.Y * LookSensitivity);
+
+	MarkLookInput(Axis);
 }
 
 void AEOOperativeCharacter::Input_LookStick(const FInputActionValue& Value)
@@ -710,7 +778,9 @@ void AEOOperativeCharacter::Input_LookStick(const FInputActionValue& Value)
 	const float Scale = StickLookRate * GetWorld()->GetDeltaSeconds();
 
 	AddControllerYawInput(Axis.X * Scale);
-	AddControllerPitchInput(Axis.Y * Scale);
+	AddControllerPitchInput(-Axis.Y * Scale);
+
+	MarkLookInput(Axis);
 }
 
 void AEOOperativeCharacter::Input_Jump(const FInputActionValue& Value)
@@ -784,12 +854,55 @@ void AEOOperativeCharacter::Input_Fire(const FInputActionValue& Value)
 
 void AEOOperativeCharacter::Input_AimStart(const FInputActionValue& Value)
 {
-	bAiming = HasControl();
+	SetAiming(HasControl());
 }
 
 void AEOOperativeCharacter::Input_AimStop(const FInputActionValue& Value)
 {
-	bAiming = false;
+	SetAiming(false);
+}
+
+void AEOOperativeCharacter::SetAiming(bool bNewAiming)
+{
+	if (bAiming == bNewAiming)
+	{
+		return;
+	}
+
+	bAiming = bNewAiming;
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	if (!Movement)
+	{
+		return;
+	}
+
+	// Aiming swaps the whole control relationship. Free movement steers the body
+	// and lets the camera trail it; aiming pins the body to the camera, so the
+	// mouse points the operative and A/D become strafes rather than turns. Both
+	// are third-person schemes, but mixing them is what makes aim feel vague.
+	bUseControllerRotationYaw = bAiming;
+	Movement->bOrientRotationToMovement = !bAiming;
+
+	if (bAiming)
+	{
+		// Snap the body to where the player is already looking, so the first shot
+		// is not fired by someone still rotating into place.
+		if (const AController* OwningController = GetController())
+		{
+			SetActorRotation(FRotator(0.f, OwningController->GetControlRotation().Yaw, 0.f));
+		}
+	}
+}
+
+void AEOOperativeCharacter::MarkLookInput(const FVector2D& Axis)
+{
+	if (!Axis.IsNearlyZero())
+	{
+		// Any deliberate look suspends the auto-follow. The player's aim always
+		// outranks the camera's opinion about where it should be.
+		LookHoldRemaining = LookHoldTime;
+	}
 }
 
 void AEOOperativeCharacter::Input_Interact(const FInputActionValue& Value)
@@ -872,6 +985,10 @@ void AEOOperativeCharacter::BeginDeploymentDrop(const FTransform& FromSocket, co
 		Traversal->Cancel();
 	}
 	StopSlide();
+
+	// Leaving the aim scheme on through the drop would pin the body to the camera
+	// for the whole descent, and land the operative strafing.
+	SetAiming(false);
 
 	Execute_SetStowed(this, false);
 
