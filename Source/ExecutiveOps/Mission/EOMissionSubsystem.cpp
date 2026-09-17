@@ -63,6 +63,11 @@ bool UEOMissionSubsystem::BeginDeployment()
 	return TryTransition(EEOMissionState::InFlight, EEOMissionState::Deploying);
 }
 
+bool UEOMissionSubsystem::AbortDeployment()
+{
+	return TryTransition(EEOMissionState::Deploying, EEOMissionState::InFlight);
+}
+
 bool UEOMissionSubsystem::CompleteDeployment()
 {
 	return TryTransition(EEOMissionState::Deploying, EEOMissionState::OnGround);

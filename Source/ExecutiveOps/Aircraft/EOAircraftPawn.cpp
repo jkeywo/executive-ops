@@ -47,7 +47,10 @@ AEOAircraftPawn::AEOAircraftPawn()
 
 	DeploymentSocket = CreateDefaultSubobject<USceneComponent>(TEXT("DeploymentSocket"));
 	DeploymentSocket->SetupAttachment(RootComponent);
-	DeploymentSocket->SetRelativeLocation(FVector(0.f, 0.f, -150.f));
+	// Far enough below the hull that the operative's capsule (96cm half-height)
+	// clears the collision box (120cm half-extent) instead of spawning inside it
+	// and being shoved sideways by depenetration on its first movement tick.
+	DeploymentSocket->SetRelativeLocation(FVector(0.f, 0.f, -350.f));
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
@@ -121,6 +124,15 @@ void AEOAircraftPawn::Tick(float DeltaSeconds)
 
 void AEOAircraftPawn::UpdateFlight(float DeltaSeconds)
 {
+	if (bDeploymentHold)
+	{
+		// Genuinely parked: velocity was zeroed the instant hold was set, so the
+		// craft does not creep for a few frames after the player commits, and
+		// there is no unchecked sweep here to leave it penetrating.
+		ThrustAlpha = FMath::FInterpTo(ThrustAlpha, 0.15f, DeltaSeconds, 3.f);
+		return;
+	}
+
 	const float MaxSpeed = FMath::Lerp(FlightMaxSpeed, HoverMaxSpeed, HoverBlend);
 	const float Accel = FMath::Lerp(FlightAcceleration, HoverAcceleration, HoverBlend);
 	const float Braking = FMath::Lerp(FlightBraking, HoverBraking, HoverBlend);
@@ -143,7 +155,16 @@ void AEOAircraftPawn::UpdateFlight(float DeltaSeconds)
 	Desired += GetActorRightVector() * MoveInput.Y;
 	Desired += FVector::UpVector * MoveInput.Z;
 
-	if (Desired.IsNearlyZero())
+	if (Desired.IsNearlyZero() && bStationKeepEnabled)
+	{
+		// Assist: with no pilot input, ease onto the deployment point instead of
+		// simply stopping wherever the craft happened to drift to.
+		const FVector ToTarget = StationKeepTarget - GetActorLocation();
+		const FVector Assist = (ToTarget * StationKeepGain).GetClampedToMaxSize(StationKeepMaxSpeed);
+		Velocity = FMath::VInterpConstantTo(Velocity, Assist, DeltaSeconds, Accel);
+		ThrustAlpha = FMath::FInterpTo(ThrustAlpha, 0.25f, DeltaSeconds, 3.f);
+	}
+	else if (Desired.IsNearlyZero())
 	{
 		Velocity = FMath::VInterpConstantTo(Velocity, FVector::ZeroVector, DeltaSeconds, Braking);
 		ThrustAlpha = FMath::FInterpTo(ThrustAlpha, 0.f, DeltaSeconds, 3.f);
@@ -437,6 +458,22 @@ bool AEOAircraftPawn::IsReadyForDeployment_Implementation() const
 	return bHoverRequested && Velocity.Size() < 200.f;
 }
 
+void AEOAircraftPawn::SetStationKeepTarget_Implementation(const FVector& WorldLocation, bool bEnabled)
+{
+	StationKeepTarget = WorldLocation;
+	bStationKeepEnabled = bEnabled;
+}
+
+void AEOAircraftPawn::SetDeploymentHold_Implementation(bool bHeld)
+{
+	bDeploymentHold = bHeld;
+	if (bHeld)
+	{
+		ClearControlDemand();
+		Velocity = FVector::ZeroVector;
+	}
+}
+
 void AEOAircraftPawn::ResetFlightState_Implementation()
 {
 	MoveInput = FVector::ZeroVector;
@@ -445,6 +482,8 @@ void AEOAircraftPawn::ResetFlightState_Implementation()
 	bHoverRequested = false;
 	HoverBlend = 0.f;
 	ThrustAlpha = 0.f;
+	bStationKeepEnabled = false;
+	bDeploymentHold = false;
 
 	if (HullPivot)
 	{

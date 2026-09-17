@@ -9,6 +9,7 @@ class AEOAircraftPawn;
 class AEOOperativeCharacter;
 class UEOInputConfig;
 class UEOSelfTest;
+class AEOMissionSite;
 
 /**
  * Owns the player's relationship with the two halves of the game: which pawn is
@@ -49,6 +50,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Control")
 	bool RequestExtraction();
 
+	/**
+	 * True when everything the drop needs is satisfied: possessing a stable
+	 * aircraft, inside the selected site's hover volume. Drives the HUD prompt as
+	 * well as the deployment itself, so the two can never disagree.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Control")
+	bool CanDeploy() const;
+
+	/** Why deployment is unavailable, for the HUD prompt. Empty when it is. */
+	UFUNCTION(BlueprintPure, Category = "Control")
+	FString GetDeploymentBlocker() const;
+
+	UFUNCTION(BlueprintPure, Category = "Control")
+	AEOMissionSite* GetSelectedSite() const;
+
+	/** Unwind a deployment in progress and put the player back in the aircraft. */
+	UFUNCTION(BlueprintCallable, Category = "Control")
+	void AbortDeployment();
+
 	/** Reset everything to the boot state without reloading the level. */
 	UFUNCTION(BlueprintCallable, Category = "Debug")
 	void EOReset();
@@ -62,6 +82,10 @@ protected:
 	virtual void PostInitializeComponents() override;
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** Enables the aircraft's assist while the player is lined up over the site. */
+	void UpdateDeploymentAssist();
 
 	/** Entry point for the -EOSelfTest command-line switch. */
 	void RunSelfTest();
@@ -71,6 +95,13 @@ protected:
 	AEOOperativeCharacter* ResolveOperative();
 
 	void ApplyMappingContext(EEOControlMode Mode);
+
+	/** Downward and forward throw applied to the operative as it leaves the craft. */
+	UPROPERTY(EditDefaultsOnly, Category = "Control|Deployment")
+	float DeployLaunchDown = 900.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Control|Deployment")
+	float DeployLaunchForward = 450.f;
 
 	/** Classes used when the level contains no placed pawn. */
 	UPROPERTY(EditDefaultsOnly, Category = "Control")

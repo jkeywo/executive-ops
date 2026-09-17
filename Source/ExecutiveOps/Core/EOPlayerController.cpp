@@ -11,10 +11,13 @@
 #include "Input/EOInputConfig.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Interfaces/EODeployableInterface.h"
+#include "Mission/EOMissionSite.h"
 #include "Mission/EOMissionSubsystem.h"
 
 AEOPlayerController::AEOPlayerController()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	CheatClass = UEOCheatManager::StaticClass();
 	AircraftClass = AEOAircraftPawn::StaticClass();
 	OperativeClass = AEOOperativeCharacter::StaticClass();
@@ -172,9 +175,16 @@ bool AEOPlayerController::PossessAircraft()
 
 	Possess(Aircraft);
 
-	// The operative rides along invisibly rather than standing in the world.
+	// Returning to the aircraft always releases the deployment freeze. Leaving it
+	// set strands the player in a craft that silently ignores every input.
+	IEOAircraftControlInterface::Execute_SetDeploymentHold(Aircraft, false);
+
+	// A drop still in progress is abandoned rather than left running: otherwise
+	// the operative keeps falling and drives the mission to OnGround while the
+	// player is flying.
 	if (Operative)
 	{
+		Operative->CancelDeploymentDrop();
 		IEODeployableInterface::Execute_SetStowed(Operative, true);
 	}
 
@@ -198,47 +208,159 @@ bool AEOPlayerController::PossessOperative()
 	return true;
 }
 
-bool AEOPlayerController::RequestDeployment()
+AEOMissionSite* AEOPlayerController::GetSelectedSite() const
+{
+	const UEOMissionSubsystem* Mission = GetWorld()
+		? GetWorld()->GetSubsystem<UEOMissionSubsystem>() : nullptr;
+	return Mission ? Mission->GetSelectedSite() : nullptr;
+}
+
+FString AEOPlayerController::GetDeploymentBlocker() const
 {
 	if (ControlMode != EEOControlMode::Aircraft || !Aircraft)
 	{
-		return false;
+		return TEXT("not flying");
+	}
+
+	if (Operative && Operative->IsDeploying())
+	{
+		return TEXT("already deploying");
+	}
+
+	// A drop with no site would throw the operative into empty city. Selection is
+	// a precondition, not an optional refinement.
+	const AEOMissionSite* Site = GetSelectedSite();
+	if (!Site)
+	{
+		return TEXT("no mission selected");
+	}
+
+	if (!Site->IsWithinHoverVolume(Aircraft))
+	{
+		return TEXT("outside the deployment zone");
 	}
 
 	if (!IEOAircraftControlInterface::Execute_IsReadyForDeployment(Aircraft))
 	{
-		UE_LOG(LogExecutiveOps, Log, TEXT("Deployment refused: aircraft not stabilised (hold hover, slow down)."));
+		return TEXT("hold hover and slow down");
+	}
+
+	// The mission state machine is the real authority on whether a drop is legal;
+	// without this the HUD would read READY while the deploy key did nothing.
+	const UEOMissionSubsystem* Mission = GetWorld()
+		? GetWorld()->GetSubsystem<UEOMissionSubsystem>() : nullptr;
+	if (Mission
+		&& Mission->GetMissionState() != EEOMissionState::Inactive
+		&& Mission->GetMissionState() != EEOMissionState::InFlight)
+	{
+		return TEXT("mission already underway");
+	}
+
+	return FString();
+}
+
+bool AEOPlayerController::CanDeploy() const
+{
+	return GetDeploymentBlocker().IsEmpty();
+}
+
+void AEOPlayerController::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	UpdateDeploymentAssist();
+}
+
+void AEOPlayerController::UpdateDeploymentAssist()
+{
+	if (ControlMode != EEOControlMode::Aircraft || !Aircraft)
+	{
+		return;
+	}
+
+	const AEOMissionSite* Site = GetSelectedSite();
+
+	// The craft only helps once the player has brought it into the zone and
+	// committed to a hover. Outside that, it stays entirely in their hands.
+	const bool bAssist = Site
+		&& Site->IsWithinHoverVolume(Aircraft)
+		&& IEOAircraftControlInterface::Execute_IsHovering(Aircraft);
+
+	IEOAircraftControlInterface::Execute_SetStationKeepTarget(
+		Aircraft, Site ? Site->GetHoverPoint() : FVector::ZeroVector, bAssist);
+}
+
+bool AEOPlayerController::RequestDeployment()
+{
+	if (!CanDeploy())
+	{
+		UE_LOG(LogExecutiveOps, Log, TEXT("Deployment refused: %s."), *GetDeploymentBlocker());
 		return false;
 	}
 
 	if (!ResolveOperative())
 	{
+		UE_LOG(LogExecutiveOps, Error, TEXT("Deployment refused: no operative available."));
 		return false;
 	}
 
 	UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>();
 	if (Mission)
 	{
-		// M0 has no mission selection step, so start one implicitly if needed.
+		// M2 has no separate commit step outside the map, so start implicitly.
 		Mission->StartMission();
-		Mission->BeginDeployment();
+		if (!Mission->BeginDeployment())
+		{
+			return false;
+		}
 	}
+
+	// The craft parks itself for the drop. It is frozen, not flying itself.
+	IEOAircraftControlInterface::Execute_SetStationKeepTarget(Aircraft, FVector::ZeroVector, false);
+	IEOAircraftControlInterface::Execute_SetDeploymentHold(Aircraft, true);
 
 	const FTransform Socket = IEOAircraftControlInterface::Execute_GetDeploymentSocketTransform(Aircraft);
 	IEODeployableInterface::Execute_OnDeployFrom(Operative, Aircraft, Socket);
 
+	// Thrown clear, down and slightly forward, rather than simply released.
+	const FVector Launch =
+		-Aircraft->GetActorUpVector() * DeployLaunchDown +
+		Aircraft->GetActorForwardVector() * DeployLaunchForward;
+	Operative->BeginDeploymentDrop(Socket, Launch);
+
+	// Possess immediately: the player rides the drop down, which is what makes
+	// this read as one continuous move instead of a cut between two games.
+	// Ground input stays locked until the operative lands.
 	if (!PossessOperative())
 	{
+		// The world is already mid-deployment; unwind it rather than leaving the
+		// player in a frozen aircraft with an operative falling beside them.
+		UE_LOG(LogExecutiveOps, Error, TEXT("Deployment failed at possession; rolling back."));
+		AbortDeployment();
 		return false;
 	}
 
-	IEODeployableInterface::Execute_OnDeployComplete(Operative);
-
-	if (Mission)
-	{
-		Mission->CompleteDeployment();
-	}
 	return true;
+}
+
+void AEOPlayerController::AbortDeployment()
+{
+	if (Operative)
+	{
+		Operative->CancelDeploymentDrop();
+		IEODeployableInterface::Execute_SetStowed(Operative, true);
+	}
+
+	if (Aircraft)
+	{
+		IEOAircraftControlInterface::Execute_SetDeploymentHold(Aircraft, false);
+	}
+
+	if (UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())
+	{
+		Mission->AbortDeployment();
+	}
+
+	PossessAircraft();
 }
 
 bool AEOPlayerController::RequestExtraction()
@@ -266,10 +388,14 @@ void AEOPlayerController::EOReset()
 	{
 		Aircraft->SetActorTransform(AircraftStartTransform);
 		IEOAircraftControlInterface::Execute_ResetFlightState(Aircraft);
+		IEOAircraftControlInterface::Execute_SetDeploymentHold(Aircraft, false);
 	}
 
 	if (Operative)
 	{
+		// Cancel before moving: a live drop would otherwise keep its timeout
+		// running and fire CompleteDeployment against a mission that just reset.
+		Operative->CancelDeploymentDrop();
 		Operative->SetActorTransform(OperativeStartTransform);
 		Operative->GetCharacterMovement()->StopMovementImmediately();
 	}

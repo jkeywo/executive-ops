@@ -52,4 +52,20 @@ public:
 	/** Drop all input and accumulated momentum. Used by the reset command. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Aircraft")
 	void ResetFlightState();
+
+	/**
+	 * Assist the player into the deployment position: while enabled and the pilot
+	 * is not actively fighting it, the craft drifts to the target point and holds.
+	 * This is what makes lining up a drop feel like the aircraft helping rather
+	 * than a precision hovering exercise.
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Aircraft|Deployment")
+	void SetStationKeepTarget(const FVector& WorldLocation, bool bEnabled);
+
+	/**
+	 * Freeze the craft for the duration of the drop. The aircraft is parked, not
+	 * flying itself, until M7 gives it real behaviour.
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Aircraft|Deployment")
+	void SetDeploymentHold(bool bHeld);
 };

@@ -58,7 +58,6 @@ void AEODebugHUD::DrawHUD()
 	{
 		const float Speed = IEOAircraftControlInterface::Execute_GetCurrentSpeed(Pawn);
 		const bool bHover = IEOAircraftControlInterface::Execute_IsHovering(Pawn);
-		const bool bReady = IEOAircraftControlInterface::Execute_IsReadyForDeployment(Pawn);
 
 		// cm/s -> km/h, the number that actually means something while flying.
 		DrawTextLine(FString::Printf(TEXT("Speed:    %.0f km/h"), Speed * 0.036f), Y);
@@ -75,8 +74,11 @@ void AEODebugHUD::DrawHUD()
 		{
 			DrawTextLine(FString::Printf(TEXT("Hover:    %s"), bHover ? TEXT("ON") : TEXT("off")), Y);
 		}
-		DrawTextLine(FString::Printf(TEXT("Deploy:   %s"), bReady ? TEXT("READY [F]") : TEXT("hold Shift to hover")), Y,
-			bReady ? FLinearColor::Green : FLinearColor(0.6f, 0.6f, 0.6f));
+		// One source of truth: the prompt is whatever the deployment gate says.
+		const FString Blocker = EOController->GetDeploymentBlocker();
+		DrawTextLine(FString::Printf(TEXT("Deploy:   %s"),
+			Blocker.IsEmpty() ? TEXT("READY [F]") : *Blocker), Y,
+			Blocker.IsEmpty() ? FLinearColor::Green : FLinearColor(0.6f, 0.6f, 0.6f));
 	}
 	else if (Pawn)
 	{

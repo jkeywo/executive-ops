@@ -59,7 +59,8 @@ UnrealEditor-Cmd.exe ExecutiveOps.uproject /Game/Maps/L_FlightTest -game -nullrh
 | Hover hold | `Left Shift` | — |
 | Sprint | — | `Left Shift` |
 | Jump | — | `Space` |
-| Deploy | `F` (while hovering) | — |
+| Deploy | `F` (in the zone, hovering) | — |
+| Tactical map | `M` | — |
 
 Bindings are declared in C++ in [`EOInputConfig.cpp`](Source/ExecutiveOps/Input/EOInputConfig.cpp)
 rather than as `.uasset` files, so a fresh clone is playable with no content to import.
@@ -76,6 +77,8 @@ Open the console with `` ` ``:
 | `EOPossessOperative` | Take control of the operative |
 | `EODeploy` | Force the aircraft → operative transition |
 | `EOExtract` | Force the operative → aircraft transition |
+| `EOSelectMission` | Select the level's mission site and begin the approach |
+| `EOToggleMap` | Show/hide the tactical map |
 | `EOMissionState` | Log the current mission state |
 | `EOToggleDebugHUD` | Show/hide the debug readout |
 

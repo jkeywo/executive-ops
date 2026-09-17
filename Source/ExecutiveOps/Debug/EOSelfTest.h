@@ -38,8 +38,6 @@ private:
 	{
 		CoreState,
 		DeployGuard,
-		Deploy,
-		Extract,
 		Reset,
 		IllegalTransitions,
 		FlightAccelerate,
@@ -49,6 +47,10 @@ private:
 		MissionSelect,
 		NavigateToSite,
 		ArrivedAtSite,
+		DeploymentAssist,
+		DeploymentDrop,
+		DeploymentLanded,
+		Extract,
 		Done
 	};
 

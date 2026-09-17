@@ -51,6 +51,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Mission")
 	bool BeginDeployment();
 
+	/** Deploying -> InFlight. Backs out of a drop that was abandoned. */
+	UFUNCTION(BlueprintCallable, Category = "Mission")
+	bool AbortDeployment();
+
 	/** Deploying -> OnGround. */
 	UFUNCTION(BlueprintCallable, Category = "Mission")
 	bool CompleteDeployment();

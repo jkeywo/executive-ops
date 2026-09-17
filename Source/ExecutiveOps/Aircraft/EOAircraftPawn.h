@@ -47,6 +47,8 @@ public:
 	virtual FTransform GetDeploymentSocketTransform_Implementation() const override;
 	virtual bool IsReadyForDeployment_Implementation() const override;
 	virtual void ResetFlightState_Implementation() override;
+	virtual void SetStationKeepTarget_Implementation(const FVector& WorldLocation, bool bEnabled) override;
+	virtual void SetDeploymentHold_Implementation(bool bHeld) override;
 	//~ End IEOAircraftControlInterface
 
 	/** 0 = fully in flight mode, 1 = fully hovering. Drives handling and feedback. */
@@ -168,6 +170,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0"))
 	float HoverYawRate = 90.f;
 
+	/** How hard station-keeping pulls the craft onto the deployment point. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0"))
+	float StationKeepGain = 1.8f;
+
+	/** Assist speed cap, so it guides the craft rather than snatching it. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0"))
+	float StationKeepMaxSpeed = 700.f;
+
 	/** Seconds to blend between the two modes. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0.01"))
 	float HoverBlendTime = 0.35f;
@@ -243,6 +253,10 @@ private:
 	float HoverBlend = 0.f;
 
 	float ThrustAlpha = 0.f;
+
+	FVector StationKeepTarget = FVector::ZeroVector;
+	bool bStationKeepEnabled = false;
+	bool bDeploymentHold = false;
 
 	/** Chase boom free-look, relative to the craft's own heading. */
 	float LookYawOffset = 0.f;

@@ -1,6 +1,7 @@
 #include "Debug/EOSelfTest.h"
 
 #include "Aircraft/EOAircraftPawn.h"
+#include "Character/EOOperativeCharacter.h"
 #include "Core/EOPlayerController.h"
 #include "ExecutiveOps.h"
 #include "GameFramework/Character.h"
@@ -108,6 +109,9 @@ void UEOSelfTest::Step()
 			TEXT("boots with mission Inactive"));
 		Check(Craft != nullptr, TEXT("possessed pawn implements the aircraft interface"));
 		BootPawn = Craft;
+
+		Check(Mission && Mission->SelectDefaultSite() != nullptr,
+			TEXT("the level provides a mission site"));
 		Advance(EPhase::DeployGuard, 0.f);
 		break;
 	}
@@ -116,40 +120,18 @@ void UEOSelfTest::Step()
 	{
 		if (Craft)
 		{
+			// Far from the site: the zone is the blocker, whatever the craft does.
+			IEOAircraftControlInterface::Execute_SetHoverEnabled(Craft, true);
+			Check(Controller->GetDeploymentBlocker() == TEXT("outside the deployment zone"),
+				FString::Printf(TEXT("deployment blocked by distance (got '%s')"),
+					*Controller->GetDeploymentBlocker()));
+			Check(!Controller->CanDeploy(), TEXT("cannot deploy from outside the zone"));
+			Check(!Controller->RequestDeployment(), TEXT("deployment request refused outside the zone"));
+
 			IEOAircraftControlInterface::Execute_SetHoverEnabled(Craft, false);
 			Check(!IEOAircraftControlInterface::Execute_IsReadyForDeployment(Craft),
 				TEXT("not ready to deploy while not hovering"));
-			Check(!Controller->RequestDeployment(),
-				TEXT("deployment refused while not hovering"));
-
-			IEOAircraftControlInterface::Execute_SetHoverEnabled(Craft, true);
-			Check(IEOAircraftControlInterface::Execute_IsReadyForDeployment(Craft),
-				TEXT("ready to deploy while hovering and slow"));
 		}
-		Advance(EPhase::Deploy, 0.f);
-		break;
-	}
-
-	case EPhase::Deploy:
-	{
-		Check(Controller->RequestDeployment(), TEXT("deployment accepted while hovering"));
-		Check(Controller->GetControlMode() == EEOControlMode::Operative,
-			TEXT("deployment possesses the operative"));
-		Check(Mission && Mission->GetMissionState() == EEOMissionState::OnGround,
-			TEXT("deployment leaves mission OnGround"));
-
-		APawn* Ground = Controller->GetPawn();
-		Check(Ground && Ground->IsA(ACharacter::StaticClass()), TEXT("operative pawn is a Character"));
-		Check(Ground != BootPawn, TEXT("operative is a different pawn to the aircraft"));
-		Advance(EPhase::Extract, 0.f);
-		break;
-	}
-
-	case EPhase::Extract:
-	{
-		Check(Controller->RequestExtraction(), TEXT("extraction accepted"));
-		Check(Controller->GetControlMode() == EEOControlMode::Aircraft,
-			TEXT("extraction returns control to the aircraft"));
 		Advance(EPhase::Reset, 0.f);
 		break;
 	}
@@ -268,9 +250,8 @@ void UEOSelfTest::Step()
 	// ---- M2: select a site and fly the approach -------------------------------
 	case EPhase::MissionSelect:
 	{
-		AEOMissionSite* Site = Mission ? Mission->SelectDefaultSite() : nullptr;
-		Check(Site != nullptr, TEXT("a mission site exists and can be selected"));
-		Check(Mission && Mission->GetSelectedSite() == Site, TEXT("selected site is recorded"));
+		AEOMissionSite* Site = Mission ? Mission->GetSelectedSite() : nullptr;
+		Check(Site != nullptr, TEXT("selected site survives a reset"));
 
 		if (Site && Craft)
 		{
@@ -321,16 +302,108 @@ void UEOSelfTest::Step()
 		Check(Mission && Mission->SelectSite(Site),
 			TEXT("can still retarget while inbound"));
 
-		Check(Controller->RequestDeployment(), TEXT("can deploy from the hover volume"));
-		Check(Mission && !Mission->SelectSite(Site),
-			TEXT("cannot retarget once deployed"));
+		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M3: deployment --"));
 
-		Advance(EPhase::Done, 0.f);
+		// The assist should have pulled the craft onto the hover point by now.
+		if (Site && Craft)
+		{
+			const float Offset = FVector::Dist(Craft->GetActorLocation(), Site->GetHoverPoint());
+			Check(Offset < 400.f,
+				FString::Printf(TEXT("assist parks the craft on the hover point (%.0fcm)"), Offset));
+		}
+		Check(Controller->CanDeploy(), TEXT("deployment is available in the zone"));
+		Check(Controller->GetDeploymentBlocker().IsEmpty(), TEXT("no blocker reported in the zone"));
+
+		Advance(EPhase::DeploymentAssist, 0.f);
+		break;
+	}
+
+	case EPhase::DeploymentAssist:
+	{
+		AEOMissionSite* Site = Mission ? Mission->GetSelectedSite() : nullptr;
+
+		DistanceSample = Craft ? Craft->GetActorLocation().Z : 0.f;
+
+		Check(Controller->RequestDeployment(), TEXT("can deploy from the hover volume"));
+		Check(Mission && !Mission->SelectSite(Site), TEXT("cannot retarget once deployed"));
+		Check(Mission && Mission->GetMissionState() == EEOMissionState::Deploying,
+			TEXT("mission is Deploying during the drop"));
+		Check(Controller->GetControlMode() == EEOControlMode::Operative,
+			TEXT("player is possessing the operative during the drop"));
+
+		if (AEOOperativeCharacter* Op = Cast<AEOOperativeCharacter>(Controller->GetPawn()))
+		{
+			Check(Op->IsDeploying(), TEXT("operative reports deploying"));
+			Check(!Op->HasControl(), TEXT("ground input is locked during the descent"));
+			Check(!Op->IsStowed(), TEXT("operative is unstowed for the drop"));
+		}
+
+		Advance(EPhase::DeploymentDrop, 4.0f);
+		break;
+	}
+
+	case EPhase::DeploymentDrop:
+	{
+		AEOOperativeCharacter* Op = Cast<AEOOperativeCharacter>(Controller->GetPawn());
+		Check(Op != nullptr, TEXT("still possessing the operative after the drop"));
+
+		if (Op)
+		{
+			Check(!Op->IsDeploying(), TEXT("drop finishes"));
+			Check(Op->HasControl(), TEXT("ground controls become active on landing"));
+			Check(Op->GetActorLocation().Z < DistanceSample,
+				FString::Printf(TEXT("operative ends up below the aircraft (%.0f -> %.0f)"),
+					DistanceSample, Op->GetActorLocation().Z));
+		}
+
+		Check(Mission && Mission->GetMissionState() == EEOMissionState::OnGround,
+			TEXT("landing leaves the mission OnGround"));
+
+		Advance(EPhase::DeploymentLanded, 0.f);
+		break;
+	}
+
+	case EPhase::DeploymentLanded:
+	{
+		// The aircraft is parked where it was left, not flying itself.
+		if (BootPawn)
+		{
+			Check(FMath::IsNearlyZero(
+				IEOAircraftControlInterface::Execute_GetCurrentSpeed(BootPawn), 5.f),
+				TEXT("aircraft is held still while the operative is deployed"));
+		}
+
+		Advance(EPhase::Extract, 0.f);
+		break;
+	}
+
+	case EPhase::Extract:
+	{
+		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- extraction handover --"));
+
+		Check(Controller->RequestExtraction(), TEXT("extraction accepted"));
+		Check(Controller->GetControlMode() == EEOControlMode::Aircraft,
+			TEXT("extraction returns control to the aircraft"));
+
+		if (AEOAircraftPawn* Plane = Cast<AEOAircraftPawn>(GetAircraftPawn()))
+		{
+			// The deployment freeze must be released, or the player is handed back
+			// a craft that silently ignores every input for the rest of the game.
+			IEOAircraftControlInterface::Execute_SetFlightInput(Plane, FVector(1.f, 0.f, 0.f));
+			SpeedSample = 0.f;
+		}
+		Advance(EPhase::Done, 1.5f);
 		break;
 	}
 
 	case EPhase::Done:
 	default:
+		if (APawn* Plane = GetAircraftPawn())
+		{
+			const float Speed = IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane);
+			Check(Speed > 100.f,
+				FString::Printf(TEXT("aircraft flies again after extraction (%.0f cm/s)"), Speed));
+		}
 		Finish();
 		break;
 	}
