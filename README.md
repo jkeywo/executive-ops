@@ -11,6 +11,19 @@ Design documents live in [`GDD/`](GDD/). Development follows
 
 ## First-time setup
 
+### Prerequisites
+
+Unreal Engine 5.8 will not build without all three of these. Visual Studio's default
+Build Tools install includes none of them, so check explicitly:
+
+- **MSVC toolset 14.38 or newer** (14.50+ preferred) - Visual Studio 2022 17.8 or later,
+  with the **Desktop development with C++** workload.
+- **Windows SDK 10.0.22621 or newer** - included with that workload's recommended components.
+- **.NET Framework SDK 4.6 or newer** (4.8.1 recommended) - a separate individual component.
+  Without it `SwarmInterface` fails to instantiate and the editor target will not build.
+
+### Steps
+
 1. Install Unreal Engine 5.8 via the Epic Games Launcher.
 2. `git lfs install` (binary assets are tracked with LFS — see `.gitattributes`).
 3. Right-click `ExecutiveOps.uproject` → **Generate Visual Studio project files**.

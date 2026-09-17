@@ -38,12 +38,26 @@ Per "do not build generalized frameworks beyond what the next milestones use":
 - No UMG, no game-feel tuning, no audio, no VFX. M8.
 - No perception mode. M9.
 
+## Build status
+
+`ExecutiveOpsEditor` (Win64, Development) compiles and links clean - 11 source files, no
+errors, no warnings.
+
+Toolchain this was built against:
+
+| | Version |
+|---|---|
+| Unreal Engine | 5.8 |
+| MSVC | 14.44.35207 (VS Build Tools 2022 17.14) |
+| Windows SDK | 10.0.26100.0 |
+| .NET Framework SDK | 4.8.1 (required by `SwarmInterface` via `UnrealEd`) |
+
 ## Known gaps
 
-- **UE 5.8 is not installed on this machine** (`C:\Program Files\Epic Games\UE_5.8` contains
-  only `.egstore`), so nothing here has been compiled. Expect to fix compile errors on the
-  first build.
-- The two maps and the Blueprint subclasses do not exist yet — see the editor checklist.
+- The two maps and the Blueprint subclasses do not exist yet - see the editor checklist.
+  Until `L_FlightTest` exists, the editor will warn that the default map is missing.
+- Nothing has been run in PIE yet. The code compiles; the eight-step verification in
+  `M0-Editor-Checklist.md` section 5 has not been executed.
 - `AEOPlayerController` spawns an aircraft at the player start if the level contains none, so
   an empty map still boots into something controllable. Remove that fallback once the maps
   have placed pawns.
