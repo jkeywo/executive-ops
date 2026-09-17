@@ -116,6 +116,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Guard")
 	TObjectPtr<UEOHealthComponent> Health;
 
+	/** The shot itself, shared with the operative. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<class UEOWeaponComponent> Weapon;
+
 	/**
 	 * Patrol waypoints, as offsets from wherever the guard is placed. Relative so
 	 * a guard can be dragged around the greybox without re-authoring its route.
@@ -163,19 +167,12 @@ protected:
 
 	// ---- Weapon ----------------------------------------------------------------
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Guard|Weapon")
-	float FireInterval = 0.85f;
 
 	/** Delay between confirming the player and the first shot: a chance to move. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Guard|Weapon")
 	float FirstShotDelay = 0.6f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Guard|Weapon")
-	float ShotDamage = 18.f;
 
-	/** Degrees of spread. Non-zero so a moving target is genuinely harder to hit. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Guard|Weapon")
-	float ShotSpread = 5.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Guard|Weapon")
 	float PreferredCombatRange = 900.f;
@@ -237,7 +234,8 @@ private:
 	float DetectionAlpha = 0.f;
 	float TimeSinceSeen = 0.f;
 	float SearchRemaining = 0.f;
-	float FireCooldown = 0.f;
+	/** Delay after being alerted, before the first shot. Not the fire rate. */
+	float FirstShotRemaining = 0.f;
 
 	bool bTargetVisible = false;
 };

@@ -3,6 +3,7 @@
 #include "Animation/AnimSequence.h"
 #include "Character/EOOperativeCharacter.h"
 #include "Combat/EOHealthComponent.h"
+#include "Combat/EOWeaponComponent.h"
 #include "Combat/EOTakedownDamageType.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
@@ -27,6 +28,17 @@ AEOGuardCharacter::AEOGuardCharacter()
 	Movement->MaxWalkSpeed = PatrolSpeed;
 
 	Health = CreateDefaultSubobject<UEOHealthComponent>(TEXT("Health"));
+
+	// The same weapon the operative carries, tuned differently and reporting
+	// itself differently. A guard's shots are weaker, slower and less accurate;
+	// those were its own ShotDamage, FireInterval and ShotSpread, and they keep
+	// their values here.
+	Weapon = CreateDefaultSubobject<UEOWeaponComponent>(TEXT("Weapon"));
+	Weapon->FireEvent = EOFeedbackEvents::Guard_Fire;
+	Weapon->Damage = 18.f;
+	Weapon->Interval = 0.85f;
+	Weapon->HipSpread = 5.f;
+	Weapon->Range = 2600.f;
 
 	// Without a controller the movement component never runs, so a guard spawned
 	// at runtime would neither move nor fall, silently.
@@ -304,8 +316,9 @@ void AEOGuardCharacter::SetState(EEOGuardState NewState)
 	if (NewState == EEOGuardState::Alerted)
 	{
 		// A beat before the first shot, so being spotted is survivable if the
-		// player moves immediately.
-		FireCooldown = FMath::Max(FireCooldown, FirstShotDelay);
+		// player moves immediately. Distinct from the weapon's own cooldown: this
+		// is about being newly alerted, not about the rate of fire.
+		FirstShotRemaining = FMath::Max(FirstShotRemaining, FirstShotDelay);
 	}
 	else if (NewState == EEOGuardState::Searching)
 	{
@@ -474,67 +487,47 @@ void AEOGuardCharacter::FireAtTarget()
 	}
 
 	const FVector Muzzle = GetActorLocation() + FVector(0.f, 0.f, 50.f) + GetActorForwardVector() * 40.f;
-	const FVector ToTarget = (Target->GetActorLocation() - Muzzle).GetSafeNormal();
 
-	// Spread, so a moving target is genuinely harder to hit and the player is
-	// rewarded for not standing still.
-	const FVector Direction = FMath::VRandCone(ToTarget, FMath::DegreesToRadians(ShotSpread));
-	const FVector End = Muzzle + Direction * SightRange;
-
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(EOGuardShot), false, this);
-
-	// ECC_Pawn, not ECC_Visibility: the default Pawn collision profile ignores
-	// the Visibility channel, so a Visibility trace goes straight through the
-	// character it is aimed at and buries itself in the scenery behind them.
-	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
-	if (Feedback)
+	// The guard aims straight at the target. It has no camera, so there is no
+	// second stage the way the operative has one - the aim point is the target.
+	const FEOShotResult Shot = Weapon->TryFire(Muzzle, Target->GetActorLocation());
+	if (!Shot.bFired)
 	{
-		FEOFeedbackContext Shot = FEOFeedbackContext::At(Muzzle);
-		Shot.Rotation = Direction.Rotation();
-		Feedback->Play(EOFeedbackEvents::Guard_Fire, Shot);
+		return;
 	}
 
-	FHitResult Hit;
-	const bool bHit = World->LineTraceSingleByChannel(Hit, Muzzle, End, ECC_Pawn, Params);
-
-	AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
-	bool bHitTarget = false;
-
-	if (HitActor)
-	{
-		// Same route the operative's shots take: hand it to the engine and let
-		// whatever was hit decide whether it can be hurt.
-		bHitTarget = HitActor->FindComponentByClass<UEOHealthComponent>() != nullptr;
-
-		UGameplayStatics::ApplyPointDamage(HitActor, ShotDamage, Direction, Hit,
-			GetController(), this, nullptr);
-	}
-
-	if (Feedback && !bHitTarget)
+	if (!Shot.bHitDamageable)
 	{
 		// A miss is the interesting case. The brief's test for this verb is that a
 		// near miss moves the player before any health is lost, so the whizz is
 		// placed at the closest point of the shot line to them - i.e. where it
 		// actually passed - and scaled by how close that was.
+		UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
+		if (!Feedback)
+		{
+			return;
+		}
+
 		const FVector MuzzleToTarget = Target->GetActorLocation() - Muzzle;
-		const float Along = FMath::Clamp(FVector::DotProduct(MuzzleToTarget, Direction), 0.f, SightRange);
-		const FVector ClosestPoint = Muzzle + Direction * Along;
+		const float Along = FMath::Clamp(
+			FVector::DotProduct(MuzzleToTarget, Shot.Direction), 0.f, Weapon->Range);
+		const FVector ClosestPoint = Muzzle + Shot.Direction * Along;
 		const float MissDistance = FVector::Dist(ClosestPoint, Target->GetActorLocation());
 
 		if (MissDistance < NearMissRadius)
 		{
 			FEOFeedbackContext Whizz = FEOFeedbackContext::At(ClosestPoint);
-			Whizz.Rotation = Direction.Rotation();
+			Whizz.Rotation = Shot.Direction.Rotation();
 			Whizz.Scale = FMath::Clamp(1.f - MissDistance / NearMissRadius, 0.3f, 1.f);
 			Feedback->Play(EOFeedbackEvents::Guard_NearMiss, Whizz);
 		}
 
-		if (bHit)
+		if (Shot.bBlockingHit)
 		{
 			// Something took the round. Dust or sparks nearby is half of why enemy
 			// fire reads as dangerous rather than as an abstract health drain.
-			FEOFeedbackContext Impact = FEOFeedbackContext::At(Hit.ImpactPoint);
-			Impact.Rotation = Hit.ImpactNormal.Rotation();
+			FEOFeedbackContext Impact = FEOFeedbackContext::At(Shot.Hit.ImpactPoint);
+			Impact.Rotation = Shot.Hit.ImpactNormal.Rotation();
 			Feedback->Play(EOFeedbackEvents::Pistol_HitHard, Impact);
 		}
 	}
@@ -660,7 +653,8 @@ void AEOGuardCharacter::ResetGuard()
 	DetectionAlpha = 0.f;
 	TimeSinceSeen = 0.f;
 	SearchRemaining = 0.f;
-	FireCooldown = 0.f;
+	FirstShotRemaining = 0.f;
+	Weapon->ResetWeapon();
 	bTargetVisible = false;
 
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
@@ -742,12 +736,16 @@ void AEOGuardCharacter::Tick(float DeltaSeconds)
 	UpdateState(DeltaSeconds);
 	UpdateMovement(DeltaSeconds);
 
-	FireCooldown = FMath::Max(FireCooldown - DeltaSeconds, 0.f);
-	if (State == EEOGuardState::Alerted && bTargetVisible && FireCooldown <= 0.f)
+	// The weapon owns the rate of fire and counts its own cooldown down. The
+	// guard used to keep a second copy of both, which meant two numbers that had
+	// to agree.
+	if (State == EEOGuardState::Alerted && bTargetVisible && Weapon->IsReady()
+		&& FirstShotRemaining <= 0.f)
 	{
 		FireAtTarget();
-		FireCooldown = FireInterval;
 	}
+
+	FirstShotRemaining = FMath::Max(FirstShotRemaining - DeltaSeconds, 0.f);
 
 	UpdateAnimation();
 }

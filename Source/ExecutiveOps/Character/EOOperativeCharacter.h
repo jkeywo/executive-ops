@@ -113,6 +113,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<UEOHealthComponent> Health;
 
+	/** The shot itself: cooldown, spread, trace, damage. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
+	TObjectPtr<class UEOWeaponComponent> Weapon;
+
 	/** The pistol itself. Rides a bone at all times; only which bone changes. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Weapon")
 	TObjectPtr<UStaticMeshComponent> PistolMesh;
@@ -142,24 +146,6 @@ protected:
 	/** How long the pistol stays out after a shot fired without aiming. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon", meta = (ClampMin = "0"))
 	float HolsterDelay = 3.f;
-
-	// ---- Weapon: one pistol, kept deliberately simple ------------------------
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
-	float WeaponDamage = 55.f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
-	float WeaponRange = 8000.f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
-	float WeaponInterval = 0.28f;
-
-	/** Hip spread in degrees. Aiming removes it, which is the only reason to aim. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
-	float HipSpread = 4.5f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Weapon")
-	float AimSpread = 0.4f;
 
 	// ---- Takedown ------------------------------------------------------------
 
@@ -438,7 +424,6 @@ private:
 	float HolsterDelayRemaining = 0.f;
 	float LookHoldRemaining = 0.f;
 	float MoveInputHoldRemaining = 0.f;
-	float FireCooldown = 0.f;
 	float TakedownRemaining = 0.f;
 
 	/**

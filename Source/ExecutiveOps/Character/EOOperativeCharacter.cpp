@@ -5,6 +5,7 @@
 #include "Character/EOTraversalComponent.h"
 #include "Combat/EOGuardCharacter.h"
 #include "Combat/EOHealthComponent.h"
+#include "Combat/EOWeaponComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Mission/EOInteractableInterface.h"
 #include "EngineUtils.h"
@@ -85,6 +86,9 @@ AEOOperativeCharacter::AEOOperativeCharacter()
 
 	Traversal = CreateDefaultSubobject<UEOTraversalComponent>(TEXT("Traversal"));
 	Health = CreateDefaultSubobject<UEOHealthComponent>(TEXT("Health"));
+
+	Weapon = CreateDefaultSubobject<UEOWeaponComponent>(TEXT("Weapon"));
+	Weapon->FireEvent = EOFeedbackEvents::Pistol_Fire;
 
 	PrimaryActorTick.bCanEverTick = true;
 }
@@ -288,7 +292,7 @@ FGameplayTag AEOOperativeCharacter::SurfaceEventFor(const FHitResult& Hit, bool 
 
 bool AEOOperativeCharacter::FireWeapon()
 {
-	if (!HasControl() || IsDead() || IsPerformingTakedown() || FireCooldown > 0.f)
+	if (!HasControl() || IsDead() || IsPerformingTakedown() || !Weapon->IsReady())
 	{
 		return false;
 	}
@@ -304,21 +308,24 @@ bool AEOOperativeCharacter::FireWeapon()
 		return false;
 	}
 
-	FireCooldown = WeaponInterval;
 	HolsterDelayRemaining = HolsterDelay;
 
-	// Drawn on the same frame as the shot, so the muzzle effect below has a weapon
-	// in hand to come from rather than one still on the hip.
+	// Drawn on the same frame as the shot, so the muzzle effect has a weapon in
+	// hand to come from rather than one still on the hip.
 	ApplyWeaponAttachment(true);
 
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(EOOperativeShot), false, this);
-	// The impact preset is chosen by surface, so the trace has to bring one back.
-	Params.bReturnPhysicalMaterial = true;
+	// From the weapon when there is one, from the body when the mesh has not been
+	// assigned yet - the muzzle flash must not float at the origin.
+	Weapon->MuzzleAttachment = (PistolMesh && PistolMesh->GetStaticMesh())
+		? static_cast<USceneComponent*>(PistolMesh)
+		: static_cast<USceneComponent*>(GetMesh());
 
-	// Two stages: the camera decides WHAT is being aimed at, the body decides
-	// whether the shot can actually get there. Firing straight from the camera
-	// lets the player hit things from behind cover their character is fully
-	// hidden by, and clip corners their crosshair is nowhere near.
+	// Two stages, and only the first is the operative's business: the camera
+	// decides WHAT is being aimed at, the weapon decides whether the shot gets
+	// there. Firing straight from the camera would let the player hit things from
+	// behind cover they are fully hidden by, and clip corners their crosshair is
+	// nowhere near. The guard has no camera, which is why this half stays here.
+	FCollisionQueryParams AimParams(SCENE_QUERY_STAT(EOOperativeAim), false, this);
 	const FVector CameraStart = FollowCamera->GetComponentLocation();
 	const FVector CameraAim = FollowCamera->GetForwardVector();
 
@@ -326,51 +333,28 @@ bool AEOOperativeCharacter::FireWeapon()
 	// ECC_Pawn throughout: the default Pawn profile ignores Visibility, so a
 	// Visibility trace passes clean through anything worth shooting.
 	const FVector AimPoint = World->LineTraceSingleByChannel(CameraHit, CameraStart,
-		CameraStart + CameraAim * WeaponRange, ECC_Pawn, Params)
+		CameraStart + CameraAim * Weapon->Range, ECC_Pawn, AimParams)
 		? CameraHit.ImpactPoint
-		: CameraStart + CameraAim * WeaponRange;
+		: CameraStart + CameraAim * Weapon->Range;
 
 	const FVector Muzzle = GetActorLocation() + FVector(0.f, 0.f, 40.f);
-	const FVector Direction = FMath::VRandCone(
-		(AimPoint - Muzzle).GetSafeNormal(),
-		FMath::DegreesToRadians(bAiming ? AimSpread : HipSpread));
 
-	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
-	if (Feedback)
+	const FEOShotResult Shot = Weapon->TryFire(Muzzle, AimPoint, bAiming);
+	if (!Shot.bFired)
 	{
-		FEOFeedbackContext Shot = FEOFeedbackContext::At(Muzzle);
-		Shot.Rotation = Direction.Rotation();
-		// From the weapon when there is one, from the body when the mesh has not
-		// been assigned yet - the muzzle flash must not float at the origin.
-		Shot.AttachTo = (PistolMesh && PistolMesh->GetStaticMesh())
-			? static_cast<USceneComponent*>(PistolMesh)
-			: static_cast<USceneComponent*>(GetMesh());
-		Feedback->Play(EOFeedbackEvents::Pistol_Fire, Shot);
+		return false;
 	}
 
-	FHitResult Hit;
-	if (World->LineTraceSingleByChannel(Hit, Muzzle, Muzzle + Direction * WeaponRange,
-		ECC_Pawn, Params))
+	if (Shot.bBlockingHit)
 	{
-		AActor* HitActor = Hit.GetActor();
-
-		// Damage goes out through the engine rather than by finding a health
-		// component and poking it. Anything that can take damage takes it; the
-		// shot no longer needs to know what it hit.
-		UGameplayStatics::ApplyPointDamage(HitActor, WeaponDamage, Direction, Hit,
-			GetController(), this, nullptr);
-
-		if (Feedback)
+		if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
 		{
-			// The lookup survives only as a presentation question - flesh or
-			// concrete - not as the route damage takes.
-			const bool bHitCharacter = HitActor
-				&& HitActor->FindComponentByClass<UEOHealthComponent>() != nullptr;
-
-			FEOFeedbackContext Impact = FEOFeedbackContext::At(Hit.ImpactPoint);
-			Impact.Rotation = Hit.ImpactNormal.Rotation();
-			Impact.Target = HitActor;
-			Feedback->Play(SurfaceEventFor(Hit, bHitCharacter), Impact);
+			// What an impact means depends on what was hit, so it stays with the
+			// caller rather than inside the weapon.
+			FEOFeedbackContext Impact = FEOFeedbackContext::At(Shot.Hit.ImpactPoint);
+			Impact.Rotation = Shot.Hit.ImpactNormal.Rotation();
+			Impact.Target = Shot.Hit.GetActor();
+			Feedback->Play(SurfaceEventFor(Shot.Hit, Shot.bHitDamageable), Impact);
 		}
 	}
 
@@ -493,7 +477,7 @@ void AEOOperativeCharacter::ResetOperative()
 
 	bSprinting = false;
 	SetAiming(false);
-	FireCooldown = 0.f;
+	Weapon->ResetWeapon();
 	TakedownRemaining = 0.f;
 	CurrentAnim = nullptr;
 
@@ -516,7 +500,6 @@ void AEOOperativeCharacter::ResetOperative()
 
 void AEOOperativeCharacter::TickCombat(float DeltaSeconds)
 {
-	FireCooldown = FMath::Max(FireCooldown - DeltaSeconds, 0.f);
 	TakedownRemaining = FMath::Max(TakedownRemaining - DeltaSeconds, 0.f);
 }
 
@@ -1134,7 +1117,7 @@ void AEOOperativeCharacter::SetStowed_Implementation(bool bInStowed)
 		StopSlide();
 		bSprinting = false;
 		bAiming = false;
-		FireCooldown = 0.f;
+		Weapon->ResetWeapon();
 		TakedownRemaining = 0.f;
 		CurrentAnim = nullptr;
 		UnCrouch();

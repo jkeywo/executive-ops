@@ -92,7 +92,7 @@ both paths call.
   Checked that no override was lost: `m0_setup.py`'s aircraft configuration sets
   only the HUD screen material, so the Blueprint never carried a value for it.
 
-### C2 - Deepen the weapon out of the operative  *(partially done)*
+### C2 - Deepen the weapon out of the operative  *(done)*
 
 **Done: damage goes through Unreal's pipeline.** Both shooters call
 `UGameplayStatics::ApplyPointDamage`; `UEOHealthComponent` binds its owner's
@@ -117,7 +117,37 @@ event rather than a choice of function.
   only to choose between a flesh and a concrete impact preset. That is a
   presentation question, not the route damage takes.
 
-**Not done: extracting UEOWeaponComponent.** See the end of this log.
+**Done: `UEOWeaponComponent`.** One call, `TryFire(muzzle, aimPoint, bAccurate)`,
+owning the cooldown, the spread cone, the `ECC_Pawn` trace and the damage. Both
+characters fire through it.
+
+- Aiming stays with the caller, which is the split the grilling settled on and
+  the only part that genuinely differed: the operative aims down a camera the
+  guard does not have. Impact feedback stays with the caller too, because what an
+  impact means depends on what was hit - the operative picks a surface preset,
+  the guard places a near-miss whizz.
+- **[autonomous]** The guard's `ShotDamage`, `ShotSpread` and `FireInterval` are
+  gone, their values carried onto the component in its constructor (18 damage,
+  5 degrees, 0.85s, 2600 range). A guard shoots weaker, slower and less
+  accurately than the operative; that was worth preserving exactly.
+- **[autonomous]** The guard kept a second cooldown of its own, counted down in
+  its tick, which would have left two numbers that had to agree. It now asks the
+  weapon whether it is ready. What survives is `FirstShotRemaining` - the beat
+  between being alerted and the first shot - which is a different idea from the
+  rate of fire and was only ever sharing the variable.
+- Two automation tests came with it, which is the point of the candidate: the
+  cooldown refuses a second shot inside the interval, and the spread cone stays
+  inside its own bound while aiming removes it. The second is the property the
+  flaky gun check actually hinged on, and it was previously only observable by
+  taking real shots at a real guard.
+- **[autonomous]** I first wrote a third test asserting that a shot damages what
+  it hits, and it failed - not in the weapon, in the fixture. A hand-built
+  `UWorld` never ran `BeginPlay`, so the target's health sat at zero, and the
+  actor would not take the spawn transform once its root was swapped. Rather
+  than keep fighting the fixture I removed it: a check that needs real collision
+  and a real `BeginPlay` is a world check, and the grilling already decided those
+  belong in an `AFunctionalTest` in a map rather than in an automation test. The
+  damage path is still covered end to end by the ground suite's guard encounter.
 
 ### C8 - Two input settings that cannot take effect  *(partially done)*
 
@@ -174,12 +204,6 @@ Four candidates are wholly or largely untouched. Each has a settled direction
 recorded in `Docs/adr/`, so the decision work is not lost - only the execution
 remains.
 
-**C2b - extract `UEOWeaponComponent`.** The damage half of C2 is done; the weapon
-module is not. The two fire paths are close but not identical: the guard's
-carries near-miss whizz placement that the operative's has no equivalent of, so
-the shared interface has to be designed rather than lifted. Agreed shape:
-`UActorComponent`, `TryFire(muzzle, aimPoint)`, guard as the second caller.
-
 **C3 - one HUD state, two adapters, on UMG.** The largest single job here: 1,184
 lines of Canvas drawing across three `AHUD` classes, plus widget assets, plus
 replacing `EOHudScreenComponent`'s render-target trick with a
@@ -201,7 +225,6 @@ contradicts the milestone doc.
 
 ## Suggested order for the rest
 
-C2b, then C4's conversion, then C3, then C7. C2b is small and its seam is already
-proven by the health component. C4's conversion makes every later change safer to
-verify. C3 and C7 are both asset-authoring jobs and are better done with the
-editor open.
+C4's conversion, then C3, then C7. C4's conversion makes every later change safer
+to verify, and the two test files added here show the pattern to follow. C3 and
+C7 are both asset-authoring jobs and are better done with the editor open.
