@@ -466,6 +466,34 @@ void AEOPlayerController::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	UpdateDeploymentAssist();
 	UpdateExtraction(DeltaSeconds);
+	UpdateScreenFlash(DeltaSeconds);
+}
+
+void AEOPlayerController::TriggerScreenFlash(const FLinearColor& Colour,
+	float HoldSeconds, float FadeSeconds)
+{
+	FlashColour = Colour;
+	FlashAlpha = 1.f;
+	FlashHoldRemaining = FMath::Max(HoldSeconds, 0.f);
+	FlashFadeSeconds = FMath::Max(FadeSeconds, KINDA_SMALL_NUMBER);
+}
+
+void AEOPlayerController::UpdateScreenFlash(float DeltaSeconds)
+{
+	if (FlashAlpha <= 0.f)
+	{
+		return;
+	}
+
+	// Opaque for the hold, then a linear fade. Linear rather than eased because
+	// the point is to stop covering the screen promptly once the cut is hidden.
+	if (FlashHoldRemaining > 0.f)
+	{
+		FlashHoldRemaining -= DeltaSeconds;
+		return;
+	}
+
+	FlashAlpha = FMath::Max(FlashAlpha - DeltaSeconds / FlashFadeSeconds, 0.f);
 }
 
 float AEOPlayerController::GetExtractionDistance() const
@@ -653,6 +681,10 @@ bool AEOPlayerController::RequestDeployment()
 	// The craft parks itself for the drop. It is frozen, not flying itself.
 	IEOAircraftControlInterface::Execute_SetStationKeepTarget(Aircraft, FVector::ZeroVector, false);
 	IEOAircraftControlInterface::Execute_SetDeploymentHold(Aircraft, true);
+
+	// Before the swap, not after: the pawn, camera and HUD all change on the next
+	// line, and the wash has to already be opaque to cover it.
+	TriggerScreenFlash(DeployFlashColour, DeployFlashHold, DeployFlashFade);
 
 	const FTransform Socket = IEOAircraftControlInterface::Execute_GetDeploymentSocketTransform(Aircraft);
 	IEODeployableInterface::Execute_OnDeployFrom(Operative, Aircraft, Socket);

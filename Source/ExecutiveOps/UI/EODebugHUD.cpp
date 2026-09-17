@@ -30,6 +30,28 @@ void AEODebugHUD::DrawTextLine(const FString& Text, float& Y, const FLinearColor
 	Y += DebugLineHeight;
 }
 
+void AEODebugHUD::PostRender()
+{
+	Super::PostRender();
+
+	const AEOPlayerController* EOController = Cast<AEOPlayerController>(PlayerOwner);
+	if (!Canvas || !EOController)
+	{
+		return;
+	}
+
+	const float Alpha = EOController->GetScreenFlashAlpha();
+	if (Alpha <= 0.f)
+	{
+		return;
+	}
+
+	FLinearColor Colour = EOController->GetScreenFlashColour();
+	Colour.A = FMath::Clamp(Alpha, 0.f, 1.f);
+
+	DrawRect(Colour, 0.f, 0.f, Canvas->SizeX, Canvas->SizeY);
+}
+
 void AEODebugHUD::DrawHUD()
 {
 	Super::DrawHUD();

@@ -90,6 +90,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Mission")
 	void RearmMission();
 
+	/**
+	 * Wash the screen out to a colour and fade it back.
+	 *
+	 * Exists to hide a cut. Deployment swaps pawn, camera and HUD in one frame,
+	 * and without something over the top the player sees the join.
+	 *
+	 * Holds at full for HoldSeconds before fading, so the swap itself lands
+	 * inside the opaque part rather than during the ramp.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Feedback")
+	void TriggerScreenFlash(const FLinearColor& Colour, float HoldSeconds, float FadeSeconds);
+
+	/** 0 when nothing is flashing. */
+	UFUNCTION(BlueprintPure, Category = "Feedback")
+	float GetScreenFlashAlpha() const { return FlashAlpha; }
+
+	UFUNCTION(BlueprintPure, Category = "Feedback")
+	FLinearColor GetScreenFlashColour() const { return FlashColour; }
+
 	/** Unwind a deployment in progress and put the player back in the aircraft. */
 	UFUNCTION(BlueprintCallable, Category = "Control")
 	void AbortDeployment();
@@ -114,6 +133,8 @@ protected:
 
 	/** Watches an inbound aircraft and performs the pickup when it arrives. */
 	void UpdateExtraction(float DeltaSeconds);
+
+	void UpdateScreenFlash(float DeltaSeconds);
 
 	/** Starts the scripted arrival over the operative. */
 	bool BeginExtractionPickup();
@@ -159,6 +180,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Control|Deployment")
 	float DeployLaunchForward = 450.f;
 
+	/** The deployment wash. White, because the drop is a violent, lit-up moment. */
+	UPROPERTY(EditDefaultsOnly, Category = "Feedback|Flash")
+	FLinearColor DeployFlashColour = FLinearColor::White;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Feedback|Flash", meta = (ClampMin = "0"))
+	float DeployFlashHold = 0.07f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Feedback|Flash", meta = (ClampMin = "0"))
+	float DeployFlashFade = 0.42f;
+
 	/** How high above the operative the aircraft holds to collect them. */
 	UPROPERTY(EditDefaultsOnly, Category = "Control|Extraction")
 	float ExtractionHoverHeight = 700.f;
@@ -188,6 +219,11 @@ private:
 	FTimerHandle RearmTimer;
 
 	bool bExtractionInbound = false;
+
+	FLinearColor FlashColour = FLinearColor::White;
+	float FlashAlpha = 0.f;
+	float FlashHoldRemaining = 0.f;
+	float FlashFadeSeconds = 0.f;
 	float ExtractionElapsed = 0.f;
 	float PickupElapsed = 0.f;
 	FVector ExtractionPoint = FVector::ZeroVector;

@@ -432,7 +432,16 @@ void UEOSelfTest::Step()
 
 		DistanceSample = Craft ? Craft->GetActorLocation().Z : 0.f;
 
+		Check(FMath::IsNearlyZero(Controller->GetScreenFlashAlpha()),
+			TEXT("no screen flash before deploying"));
+
 		Check(Controller->RequestDeployment(), TEXT("can deploy from the hover volume"));
+
+		// The wash has to be opaque on the frame the swap happens, or it is not
+		// hiding anything.
+		Check(Controller->GetScreenFlashAlpha() >= 0.99f,
+			FString::Printf(TEXT("deploying flashes the screen (alpha %.2f)"),
+				Controller->GetScreenFlashAlpha()));
 		Check(Mission && !Mission->SelectSite(Site), TEXT("cannot retarget once deployed"));
 		Check(Mission && Mission->GetMissionState() == EEOMissionState::Deploying,
 			TEXT("mission is Deploying during the drop"));
@@ -466,6 +475,10 @@ void UEOSelfTest::Step()
 
 		Check(Mission && Mission->GetMissionState() == EEOMissionState::OnGround,
 			TEXT("landing leaves the mission OnGround"));
+
+		Check(FMath::IsNearlyZero(Controller->GetScreenFlashAlpha()),
+			FString::Printf(TEXT("the flash fades out (alpha %.2f)"),
+				Controller->GetScreenFlashAlpha()));
 
 		Advance(EPhase::DeploymentLanded, 0.f);
 		break;
