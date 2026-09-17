@@ -1,5 +1,7 @@
 #include "Aircraft/EOAircraftPawn.h"
 
+#include "Aircraft/EOAircraftMovementComponent.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
@@ -23,6 +25,13 @@ AEOAircraftPawn::AEOAircraftPawn()
 	CollisionBox->InitBoxExtent(FVector(400.f, 300.f, 120.f));
 	CollisionBox->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = CollisionBox;
+
+	// The craft used to integrate its own position in Tick, twice - once for the
+	// piloted path and once for the scripted arrival - with no movement component
+	// at all, so GetMovementComponent() returned null and nothing in the engine
+	// could see it move.
+	Movement = CreateDefaultSubobject<UEOAircraftMovementComponent>(TEXT("Movement"));
+	Movement->UpdatedComponent = CollisionBox;
 
 	// APawn defaults bUseControllerRotationYaw to true, which makes the controller
 	// overwrite the hull's rotation every frame and silently destroys yaw input.
@@ -107,6 +116,13 @@ AEOAircraftPawn::AEOAircraftPawn()
 void AEOAircraftPawn::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// The move happens inside the movement component, so the impact comes back out
+	// as an event rather than the component knowing what feedback is.
+	if (Movement)
+	{
+		Movement->OnImpact.AddUObject(this, &AEOAircraftPawn::ReportImpact);
+	}
 
 	// Audio is entirely optional in M1: the hook exists so M8 only has to assign a
 	// sound, but an unset asset must not produce a warning every frame.
@@ -224,7 +240,7 @@ const UEOInputConfig* AEOAircraftPawn::GetInputConfig() const
 float AEOAircraftPawn::GetSpeedAlpha() const
 {
 	return FlightMaxSpeed > KINDA_SMALL_NUMBER
-		? FMath::Clamp(Velocity.Size() / FlightMaxSpeed, 0.f, 1.f)
+		? FMath::Clamp(Movement->Velocity.Size() / FlightMaxSpeed, 0.f, 1.f)
 		: 0.f;
 }
 
@@ -272,39 +288,14 @@ bool AEOAircraftPawn::UpdateScriptedArrival(float DeltaSeconds)
 		? ToTarget / Distance * DesiredSpeed
 		: FVector::ZeroVector;
 
-	Velocity = FMath::VInterpConstantTo(Velocity, Target, DeltaSeconds, FlightAcceleration);
+	Movement->Velocity = FMath::VInterpConstantTo(Movement->Velocity, Target, DeltaSeconds, FlightAcceleration);
 	ThrustAlpha = FMath::FInterpTo(ThrustAlpha, 0.6f, DeltaSeconds, 4.f);
 
-	if (!Velocity.IsNearlyZero())
-	{
-		FHitResult Hit;
-		AddActorWorldOffset(Velocity * DeltaSeconds, /*bSweep=*/true, &Hit);
-
-		if (Hit.bBlockingHit)
-		{
-			if (Hit.bStartPenetrating)
-			{
-				// Same escape the piloted path uses: projecting velocity onto the
-				// surface would delete the component that gets the craft clear.
-				AddActorWorldOffset(Hit.Normal * (Hit.PenetrationDepth + 1.f), /*bSweep=*/false);
-			}
-			else
-			{
-				// Clipped a building on the way in. Slide rather than stopping
-				// dead, damped per unit time so the penalty does not depend on
-				// frame rate - a per-frame halving stalls the craft completely
-				// at high refresh rates.
-				ReportImpact(Hit);
-
-				Velocity = FVector::VectorPlaneProject(Velocity, Hit.Normal)
-					* FMath::Pow(SlideRetentionPerSecond, DeltaSeconds);
-			}
-		}
-	}
+	Movement->MoveByVelocity(DeltaSeconds);
 
 	// Arrived means settled, not merely passing through: a craft still doing
 	// 40 m/s through the radius has not stopped to collect anyone.
-	bScriptedArrived = (Distance <= ScriptedArriveRadius) && (Velocity.Size() < 400.f);
+	bScriptedArrived = (Distance <= ScriptedArriveRadius) && (Movement->Velocity.Size() < 400.f);
 	return true;
 }
 
@@ -336,7 +327,7 @@ void AEOAircraftPawn::UpdateFlight(float DeltaSeconds)
 
 		// Carry momentum around with the nose. Without this the craft keeps its old
 		// world heading through a turn and slides sideways like it is on ice.
-		Velocity = FRotator(0.f, YawDelta * VelocityTurnFactor, 0.f).RotateVector(Velocity);
+		Movement->Velocity = FRotator(0.f, YawDelta * VelocityTurnFactor, 0.f).RotateVector(Movement->Velocity);
 	}
 
 	// Build the desired direction in the craft's own frame. Vertical stays world-up
@@ -352,61 +343,39 @@ void AEOAircraftPawn::UpdateFlight(float DeltaSeconds)
 		// simply stopping wherever the craft happened to drift to.
 		const FVector ToTarget = StationKeepTarget - GetActorLocation();
 		const FVector Assist = (ToTarget * StationKeepGain).GetClampedToMaxSize(StationKeepMaxSpeed);
-		Velocity = FMath::VInterpConstantTo(Velocity, Assist, DeltaSeconds, Accel);
+		Movement->Velocity = FMath::VInterpConstantTo(Movement->Velocity, Assist, DeltaSeconds, Accel);
 		ThrustAlpha = FMath::FInterpTo(ThrustAlpha, 0.25f, DeltaSeconds, 3.f);
 	}
 	else if (Desired.IsNearlyZero())
 	{
-		Velocity = FMath::VInterpConstantTo(Velocity, FVector::ZeroVector, DeltaSeconds, Braking);
+		Movement->Velocity = FMath::VInterpConstantTo(Movement->Velocity, FVector::ZeroVector, DeltaSeconds, Braking);
 		ThrustAlpha = FMath::FInterpTo(ThrustAlpha, 0.f, DeltaSeconds, 3.f);
 	}
 	else
 	{
 		const FVector Target = Desired.GetClampedToMaxSize(1.f) * MaxSpeed;
-		Velocity = FMath::VInterpConstantTo(Velocity, Target, DeltaSeconds, Accel);
+		Movement->Velocity = FMath::VInterpConstantTo(Movement->Velocity, Target, DeltaSeconds, Accel);
 		ThrustAlpha = FMath::FInterpTo(ThrustAlpha, 1.f, DeltaSeconds, 6.f);
 	}
 
 	// Bleed down to the current maximum at the braking rate rather than clamping
 	// hard. A hard clamp would make HoverBlendTime dictate the whole deceleration
 	// when entering hover at speed, bypassing the braking model entirely.
-	const float Speed = Velocity.Size();
+	const float Speed = Movement->Velocity.Size();
 	if (Speed > MaxSpeed)
 	{
 		const float Shed = FMath::Max(MaxSpeed, Speed - Braking * DeltaSeconds);
-		Velocity = Velocity.GetSafeNormal() * Shed;
+		Movement->Velocity = Movement->Velocity.GetSafeNormal() * Shed;
 	}
 
-	if (Velocity.IsNearlyZero())
-	{
-		return;
-	}
+	Movement->MoveByVelocity(DeltaSeconds);
+}
 
-	FHitResult Hit;
-	AddActorWorldOffset(Velocity * DeltaSeconds, /*bSweep=*/true, &Hit);
-
-	if (!Hit.bBlockingHit)
-	{
-		return;
-	}
-
-	if (Hit.bStartPenetrating)
-	{
-		// A sweep that begins penetrating reports zero distance, and projecting
-		// velocity onto the surface would delete the very component needed to get
-		// out. Push clear along the escape normal instead.
-		const FVector Escape = Hit.Normal * (Hit.PenetrationDepth + 1.f);
-		AddActorWorldOffset(Escape, /*bSweep=*/false);
-		return;
-	}
-
-	ReportImpact(Hit);
-
-	// Slide along the surface rather than stopping dead: clipping a building at
-	// speed should cost momentum, not end the flight. Damped per unit time so the
-	// penalty does not depend on frame rate.
-	Velocity = FVector::VectorPlaneProject(Velocity, Hit.Normal)
-		* FMath::Pow(SlideRetentionPerSecond, DeltaSeconds);
+FVector AEOAircraftPawn::GetVelocity() const
+{
+	// Overridden so that everything reading a pawn's velocity - feedback scaling,
+	// the HUD, the self-tests - sees the flight model's value.
+	return Movement ? Movement->Velocity : FVector::ZeroVector;
 }
 
 void AEOAircraftPawn::ReportImpact(const FHitResult& Hit)
@@ -420,7 +389,7 @@ void AEOAircraftPawn::ReportImpact(const FHitResult& Hit)
 	// How much of the impact went into the surface rather than along it. A glancing
 	// clip at speed is a scrape; flying into a wall head-on is a collision. Using
 	// the normal component rather than raw speed is what keeps those distinct.
-	const float ClosingSpeed = FMath::Abs(FVector::DotProduct(Velocity, Hit.Normal));
+	const float ClosingSpeed = FMath::Abs(FVector::DotProduct(Movement->Velocity, Hit.Normal));
 	const float Severity = FMath::Clamp(ClosingSpeed / FMath::Max(FlightMaxSpeed * 0.35f, 1.f), 0.f, 1.5f);
 
 	FEOFeedbackContext Context = FEOFeedbackContext::At(Hit.ImpactPoint);
@@ -577,11 +546,11 @@ void AEOAircraftPawn::UpdateFlightTransients(float DeltaSeconds)
 	UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this);
 	if (!Feedback)
 	{
-		PreviousSpeed = Velocity.Size();
+		PreviousSpeed = Movement->Velocity.Size();
 		return;
 	}
 
-	const float Speed = Velocity.Size();
+	const float Speed = Movement->Velocity.Size();
 	const float Along = (Speed - PreviousSpeed) / DeltaSeconds;
 	PreviousSpeed = Speed;
 
@@ -816,7 +785,7 @@ bool AEOAircraftPawn::IsHovering_Implementation() const
 
 float AEOAircraftPawn::GetCurrentSpeed_Implementation() const
 {
-	return Velocity.Size();
+	return Movement->Velocity.Size();
 }
 
 FTransform AEOAircraftPawn::GetDeploymentSocketTransform_Implementation() const
@@ -828,7 +797,7 @@ bool AEOAircraftPawn::IsReadyForDeployment_Implementation() const
 {
 	// M1 proxy for "stabilised over the site": committed to hover and nearly stopped.
 	// M3 replaces this with the hover volume test.
-	return bHoverRequested && Velocity.Size() < 200.f;
+	return bHoverRequested && Movement->Velocity.Size() < 200.f;
 }
 
 void AEOAircraftPawn::SetStationKeepTarget_Implementation(const FVector& WorldLocation, bool bEnabled)
@@ -843,7 +812,7 @@ void AEOAircraftPawn::SetDeploymentHold_Implementation(bool bHeld)
 	if (bHeld)
 	{
 		ClearControlDemand();
-		Velocity = FVector::ZeroVector;
+		Movement->Velocity = FVector::ZeroVector;
 	}
 }
 
@@ -879,7 +848,7 @@ void AEOAircraftPawn::ResetFlightState_Implementation()
 {
 	MoveInput = FVector::ZeroVector;
 	YawInput = 0.f;
-	Velocity = FVector::ZeroVector;
+	Movement->Velocity = FVector::ZeroVector;
 	bHoverRequested = false;
 	HoverBlend = 0.f;
 	ThrustAlpha = 0.f;

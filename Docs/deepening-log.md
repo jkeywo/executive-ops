@@ -69,3 +69,26 @@ Worth revisiting if the operative ever becomes an `IEOMissionParticipantInterfac
 implementer - the subsystem already pushes state to participants, and that is the
 route by which it could own the sequence without holding pawn pointers.
 
+### C5 - The aircraft's integrator is written twice  *(done)*
+
+`UEOAircraftMovementComponent : UFloatingPawnMovement` now owns velocity and the
+move. The sweep / penetration-escape / slide-along-surface block existed twice -
+once in `UpdateFlight`, once in `UpdateScriptedArrival` - and is now one method
+both paths call.
+
+- The pawn still decides what the craft is trying to do: throttle curves, hover
+  blend, attitude, the scripted approach gain. Only the move crossed over, which
+  is the split the grilling settled on.
+- **[autonomous]** `TickComponent` deliberately does not call `Super`.
+  `UFloatingPawnMovement` applies control input to velocity and then moves, which
+  would both fight the pawn's flight model and move the craft twice in a frame.
+  What this wants from the base class is its velocity plumbing, not its
+  integration. The pawn calls `MoveByVelocity` from its own tick so that deciding
+  and moving stay in order within the frame.
+- **[autonomous]** Impacts come back out of the component as a delegate rather
+  than the component calling the pawn, so it does not need to know what feedback
+  is.
+- `SlideRetentionPerSecond` moved to the component at the same 0.15 default.
+  Checked that no override was lost: `m0_setup.py`'s aircraft configuration sets
+  only the HUD screen material, so the Blueprint never carried a value for it.
+

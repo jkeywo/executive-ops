@@ -36,7 +36,7 @@ public:
 	AEOAircraftPawn();
 
 	virtual void Tick(float DeltaSeconds) override;
-	virtual FVector GetVelocity() const override { return Velocity; }
+	virtual FVector GetVelocity() const override;
 
 	//~ IEOAircraftControlInterface
 	virtual void SetFlightInput_Implementation(const FVector& MoveInput) override;
@@ -134,6 +134,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aircraft")
 	TObjectPtr<UBoxComponent> CollisionBox;
 
+	/**
+	 * Owns this frame's velocity and the move it produces. The pawn decides what
+	 * the craft is trying to do; this turns that into a position.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aircraft")
+	TObjectPtr<class UEOAircraftMovementComponent> Movement;
+
 	/** Everything visual hangs off here so the hull can bank without rotating collision. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aircraft")
 	TObjectPtr<USceneComponent> HullPivot;
@@ -210,10 +217,6 @@ protected:
 	/** Within this of the destination, and slow, the arrival counts as complete. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Extraction", meta = (ClampMin = "1"))
 	float ScriptedArriveRadius = 300.f;
-
-	/** Fraction of tangential speed kept per second while scraping along a surface. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0", ClampMax = "1"))
-	float SlideRetentionPerSecond = 0.15f;
 
 	// ---- Handling: hover mode --------------------------------------------------
 
@@ -338,8 +341,6 @@ private:
 	 */
 	FVector MoveInput = FVector::ZeroVector;
 	float YawInput = 0.f;
-
-	FVector Velocity = FVector::ZeroVector;
 
 	bool bHoverRequested = false;
 
