@@ -40,8 +40,15 @@ Per "do not build generalized frameworks beyond what the next milestones use":
 
 ## Build status
 
-`ExecutiveOpsEditor` (Win64, Development) compiles and links clean - 11 source files, no
-errors, no warnings.
+Both targets compile and link clean (Win64, Development) - 11 source files, no errors,
+no warnings:
+
+| Target | Output |
+|---|---|
+| `ExecutiveOpsEditor` | `UnrealEditor-ExecutiveOps.dll` |
+| `ExecutiveOps` | `Binaries/Win64/ExecutiveOps.exe` |
+
+The game target building confirms nothing in M0 is accidentally editor-only.
 
 Toolchain this was built against:
 
