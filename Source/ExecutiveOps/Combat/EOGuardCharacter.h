@@ -38,9 +38,10 @@ enum class EEOGuardState : uint8
  * One guard: walks a fixed patrol, sees the player, escalates, shoots, pursues,
  * and can lose them again.
  *
- * Steers directly toward its target rather than using navigation. On a greybox
- * route with one guard that is enough to be dangerous, and it avoids a navmesh
- * build step for something M6 will likely replace anyway.
+ * What it does is decided by a StateTree on its controller; how it does it lives
+ * here. The pawn publishes its own EEOGuardState so that the HUD, the takedown
+ * rule and the encounter checks have one thing to read, without any of them
+ * needing to know a tree exists. See Docs/adr/0005.
  */
 UCLASS()
 class EXECUTIVEOPS_API AEOGuardCharacter : public ACharacter
@@ -70,8 +71,7 @@ public:
 	float GetSightHalfAngle() const { return SightHalfAngle; }
 
 	// ---- Verbs the StateTree drives -------------------------------------------
-	// Tasks decide when; the guard decides how. These are the same behaviours the
-	// C++ state machine runs, exposed so a tree can call them instead.
+	// Tasks decide when; the guard decides how.
 
 	/** Publishes what the guard is doing. The HUD and the checks read this. */
 	UFUNCTION(BlueprintCallable, Category = "Guard")
@@ -96,14 +96,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Guard")
 	float GetTimeSinceSeen() const { return TimeSinceSeen; }
-
-	/**
-	 * True when a StateTree is driving. The C++ state machine stands down, so
-	 * that assigning a tree is the whole switch and removing it is the whole
-	 * revert.
-	 */
-	UFUNCTION(BlueprintPure, Category = "Guard")
-	bool IsDrivenByStateTree() const;
 
 	/**
 	 * True if the operative is positioned for a silent kill: close, behind, and
@@ -144,8 +136,6 @@ protected:
 	FVector GetPursuitLocation() const;
 
 	void UpdatePerception(float DeltaSeconds);
-	void UpdateState(float DeltaSeconds);
-	void UpdateMovement(float DeltaSeconds);
 	void UpdateAnimation();
 
 	void SetState(EEOGuardState NewState);

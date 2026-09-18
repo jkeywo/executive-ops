@@ -111,6 +111,17 @@ struct EXECUTIVEOPS_API FEOGuardDetectionCondition : public FStateTreeConditionC
 {
 	GENERATED_BODY()
 
+	/**
+	 * Flips the answer, so one node covers "is" and "is not".
+	 *
+	 * A per-condition flag rather than something the tree offers: StateTree has
+	 * no invert of its own, and its own conditions each carry one. Needed here
+	 * because a guard settling back down asks the opposite question to a guard
+	 * noticing something.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Parameter")
+	bool bInvert = false;
+
 	using FInstanceDataType = FEOGuardDetectionConditionInstanceData;
 	virtual const UStruct* GetInstanceDataType() const override { return FInstanceDataType::StaticStruct(); }
 
@@ -122,6 +133,17 @@ USTRUCT(meta = (DisplayName = "EO Guard Sees Target"))
 struct EXECUTIVEOPS_API FEOGuardSeesTargetCondition : public FStateTreeConditionCommonBase
 {
 	GENERATED_BODY()
+
+	/**
+	 * Flips the answer, so one node covers "is" and "is not".
+	 *
+	 * A per-condition flag rather than something the tree offers: StateTree has
+	 * no invert of its own, and its own conditions each carry one. Needed here
+	 * because a guard settling back down asks the opposite question to a guard
+	 * noticing something.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Parameter")
+	bool bInvert = false;
 
 	using FInstanceDataType = FEOGuardNodeInstanceData;
 	virtual const UStruct* GetInstanceDataType() const override { return FInstanceDataType::StaticStruct(); }
@@ -147,6 +169,17 @@ USTRUCT(meta = (DisplayName = "EO Guard Lost Contact"))
 struct EXECUTIVEOPS_API FEOGuardLostContactCondition : public FStateTreeConditionCommonBase
 {
 	GENERATED_BODY()
+
+	/**
+	 * Flips the answer, so one node covers "is" and "is not".
+	 *
+	 * A per-condition flag rather than something the tree offers: StateTree has
+	 * no invert of its own, and its own conditions each carry one. Needed here
+	 * because a guard settling back down asks the opposite question to a guard
+	 * noticing something.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Parameter")
+	bool bInvert = false;
 
 	using FInstanceDataType = FEOGuardLostContactInstanceData;
 	virtual const UStruct* GetInstanceDataType() const override { return FInstanceDataType::StaticStruct(); }

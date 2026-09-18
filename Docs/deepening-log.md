@@ -321,27 +321,39 @@ pawn, because the aircraft is a pawn too.
   maps and rewrites Blueprint defaults - that would have taken the animation
   graph wiring with it.
 
-**The StateTree is written but not wired.** The schema, four tasks, three
-conditions and the `UStateTreeAIComponent` on the controller all exist and
-compile. The graph does not, and cannot be made here: `FStateTreeCompiler` lives
-in `StateTreeEditorModule/Private` with no Python binding and no editing
-subsystem, so editor data built from script could never be compiled into a
-runnable tree. Confirmed by probing the API rather than assumed.
+**The StateTree drives the guard.** The schema, four tasks and three conditions
+are C++; the graph is `Content/AI/ST_Guard`, authored in the editor by the author
+because it could not be built here - `FStateTreeCompiler` lives in
+`StateTreeEditorModule/Private` with no Python binding, so editor data built from
+script could never be compiled into a runnable tree. Confirmed by probing the
+API, not assumed. `Docs/Guard-StateTree.md` is the wiring.
 
-Put to the author, who chose to have the C++ written here and author the graph in
-the editor. `Docs/Guard-StateTree.md` is the wiring instruction.
+The C++ state machine is gone: `UpdateState`, `UpdateMovement` and the gates that
+chose between them. The pawn keeps the verbs and still publishes its own
+`EEOGuardState`, so the HUD, the takedown rule and the encounter checks read one
+thing and none of them needs to know a tree exists.
 
-- **[autonomous]** The guard's C++ state machine stays as the fallback and runs
-  whenever no tree is assigned, so this lands without changing any behaviour:
-  assigning a tree is the whole switch and clearing it is the whole revert. The
-  alternative - deleting the machine and shipping a guard that does nothing until
-  an asset exists - would have left the branch broken for however long the
-  authoring took.
-- **[autonomous]** Tasks set the pawn's `EEOGuardState` on entry rather than the
-  tree owning that state privately. It is what the HUD reads, what the encounter
-  checks assert on, and what refuses a takedown, so the tree drives behaviour
-  without becoming the only thing that knows what is happening. It also means the
-  127 ground checks stay meaningful across the switch.
+Two things I got wrong, both in the authoring instructions rather than the code:
+
+- I wrote that states "re-evaluate from the root each tick", so `Patrol` and
+  `Suspicious` needed no outgoing transitions. They do:
+  `EStateTreeTransitionTrigger` needs an explicit `OnTick`, and a state with no
+  outgoing transition is one the guard never leaves. It patrolled forever while
+  perception reported the operative standing in front of it.
+- I wrote "tick **Invert**" on a condition. There is no invert in StateTree -
+  `FStateTreeConditionBase` has none, and the engine's own conditions each carry
+  their own `bInvert`. Mine now do too, which is the convention rather than an
+  invention.
+
+**[autonomous] A third bug was mine and in the code.** The encounter checks hold
+the guard unaware by calling `ResetGuard()` each step, which reset the pawn's
+fields but not the tree - so the tree stayed in Engage, re-derived `Alerted` on
+its next tick, and shot the operative dead before it could fire back. Resetting
+now restarts the brain and clears remembered perception stimuli, because sight
+otherwise re-acquires from a stimulus registered before the reset.
+
+Worth keeping in mind for anything else that resets an actor driven by a tree:
+putting the pawn back is only half of it.
 
 ## Suggested order for the rest
 

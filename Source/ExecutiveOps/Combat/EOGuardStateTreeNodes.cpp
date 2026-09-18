@@ -128,19 +128,22 @@ EStateTreeRunStatus FEOGuardSearchTask::Tick(FStateTreeExecutionContext& Context
 bool FEOGuardDetectionCondition::TestCondition(FStateTreeExecutionContext& Context) const
 {
 	const FInstanceDataType& Data = Context.GetInstanceData(*this);
-	return Data.Guard && Data.Guard->GetDetectionAlpha() >= Data.Threshold;
+	const bool bResult = Data.Guard && Data.Guard->GetDetectionAlpha() >= Data.Threshold;
+	return bResult != bInvert;
 }
 
 bool FEOGuardSeesTargetCondition::TestCondition(FStateTreeExecutionContext& Context) const
 {
 	const FInstanceDataType& Data = Context.GetInstanceData(*this);
-	return Data.Guard && Data.Guard->IsTargetVisible();
+	const bool bResult = Data.Guard && Data.Guard->IsTargetVisible();
+	return bResult != bInvert;
 }
 
 bool FEOGuardLostContactCondition::TestCondition(FStateTreeExecutionContext& Context) const
 {
 	const FInstanceDataType& Data = Context.GetInstanceData(*this);
-	return Data.Guard
+	const bool bResult = Data.Guard
 		&& !Data.Guard->IsTargetVisible()
 		&& Data.Guard->GetTimeSinceSeen() >= Data.Seconds;
+	return bResult != bInvert;
 }

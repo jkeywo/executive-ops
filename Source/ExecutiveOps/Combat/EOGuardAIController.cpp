@@ -70,6 +70,23 @@ bool AEOGuardAIController::IsRunningStateTree() const
 	return Brain && BrainTree && Brain->IsRunning();
 }
 
+void AEOGuardAIController::RestartBrain()
+{
+	if (Brain && BrainTree)
+	{
+		Brain->RestartLogic();
+	}
+
+	// Sight remembers what it has seen, so a guard restored to unaware would
+	// otherwise re-acquire the operative from a stimulus it registered before
+	// the reset.
+	SensedActors.Reset();
+	if (Perception)
+	{
+		Perception->ForgetAll();
+	}
+}
+
 void AEOGuardAIController::HandlePerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
 {
 	if (!Actor)

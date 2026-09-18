@@ -15,3 +15,19 @@ Recorded because a future reader will otherwise find an AI rewrite inside a
 milestone whose own documentation forbids new work, and reasonably wonder why.
 The detection ramp and the three-height line-of-sight heuristic are good and
 transfer unchanged; they are the part worth not losing.
+
+**Update: done.** Sight is a `UAIPerceptionComponent` on `AEOGuardAIController`,
+movement paths over a navmesh, and the five states are a StateTree
+(`Content/AI/ST_Guard`) driving C++ tasks. The hand-rolled state machine, the
+per-tick scan over every actor in the world, and the direct steering are all
+gone.
+
+The pawn still publishes `EEOGuardState`. That is deliberate: the HUD reads it,
+the takedown rule turns on it, and the encounter checks assert on it, so the tree
+decides behaviour without becoming the only thing that knows what a guard is
+doing. It is also what let the 127 ground checks stay meaningful across the
+switch rather than being rewritten alongside it.
+
+One consequence worth knowing: resetting a guard now has to restart its tree as
+well as its fields. Putting the pawn back is only half of it - the tree otherwise
+keeps the state it reached and re-derives the pawn's from it on the next tick.

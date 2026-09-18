@@ -57,6 +57,16 @@ public:
 	bool IsRunningStateTree() const;
 
 	/**
+	 * Sends the brain back to the start.
+	 *
+	 * Resetting the pawn's fields is not enough on its own: the tree keeps
+	 * whatever state it was in, and re-derives the pawn's state from it on the
+	 * next tick. A guard put back on patrol would quietly re-alert and keep
+	 * shooting.
+	 */
+	void RestartBrain();
+
+	/**
 	 * The tree that decides what this guard does. Optional.
 	 *
 	 * Left unset deliberately: the nodes in EOGuardStateTreeNodes.h exist and

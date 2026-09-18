@@ -314,65 +314,6 @@ void AEOGuardCharacter::SetState(EEOGuardState NewState)
 	}
 }
 
-void AEOGuardCharacter::UpdateState(float DeltaSeconds)
-{
-	switch (State)
-	{
-	case EEOGuardState::Patrolling:
-		if (DetectionAlpha >= 1.f)
-		{
-			SetState(EEOGuardState::Alerted);
-		}
-		else if (DetectionAlpha > 0.f)
-		{
-			SetState(EEOGuardState::Suspicious);
-		}
-		break;
-
-	case EEOGuardState::Suspicious:
-		if (DetectionAlpha >= 1.f)
-		{
-			SetState(EEOGuardState::Alerted);
-		}
-		else if (DetectionAlpha <= 0.f)
-		{
-			SetState(EEOGuardState::Patrolling);
-		}
-		break;
-
-	case EEOGuardState::Alerted:
-		if (!bTargetVisible && TimeSinceSeen >= TimeToLose)
-		{
-			SetState(EEOGuardState::Searching);
-		}
-		break;
-
-	case EEOGuardState::Searching:
-		if (bTargetVisible && DetectionAlpha >= 1.f)
-		{
-			SetState(EEOGuardState::Alerted);
-			break;
-		}
-
-		SearchRemaining -= DeltaSeconds;
-		if (SearchRemaining <= 0.f)
-		{
-			// Do not zero awareness of someone standing in plain view: the HUD
-			// readout would snap to empty and start climbing again from nothing.
-			if (!bTargetVisible)
-			{
-				DetectionAlpha = 0.f;
-				Target = nullptr;
-			}
-			SetState(EEOGuardState::Patrolling);
-		}
-		break;
-
-	default:
-		break;
-	}
-}
-
 // ------------------------------------------------------------------- movement
 
 bool AEOGuardCharacter::MoveToward(const FVector& TargetLocation, float DeltaSeconds, float AcceptRadius)
@@ -424,12 +365,6 @@ bool AEOGuardCharacter::MoveToward(const FVector& TargetLocation, float DeltaSec
 	}
 
 	return false;
-}
-
-bool AEOGuardCharacter::IsDrivenByStateTree() const
-{
-	const AEOGuardAIController* AI = Cast<AEOGuardAIController>(GetController());
-	return AI && AI->IsRunningStateTree();
 }
 
 void AEOGuardCharacter::TickPatrolMovement(float DeltaSeconds)
@@ -484,7 +419,23 @@ bool AEOGuardCharacter::TickSearchMovement(float DeltaSeconds)
 	}
 
 	SearchRemaining -= DeltaSeconds;
-	return SearchRemaining <= 0.f;
+	if (SearchRemaining > 0.f)
+	{
+		return false;
+	}
+
+	// Giving up means forgetting. Without this the guard returns to patrol still
+	// holding the awareness that sent it searching, and re-alerts on the spot.
+	//
+	// Do not zero awareness of someone standing in plain view: the readout would
+	// snap to empty and start climbing again from nothing.
+	if (!bTargetVisible)
+	{
+		DetectionAlpha = 0.f;
+		Target = nullptr;
+	}
+
+	return true;
 }
 
 void AEOGuardCharacter::TickEngagement(float DeltaSeconds)
@@ -495,81 +446,6 @@ void AEOGuardCharacter::TickEngagement(float DeltaSeconds)
 	}
 
 	FirstShotRemaining = FMath::Max(FirstShotRemaining - DeltaSeconds, 0.f);
-}
-
-void AEOGuardCharacter::UpdateMovement(float DeltaSeconds)
-{
-	switch (State)
-	{
-	case EEOGuardState::Patrolling:
-	{
-		if (PatrolOffsets.Num() == 0)
-		{
-			return;
-		}
-
-		if (PatrolWaitRemaining > 0.f)
-		{
-			PatrolWaitRemaining -= DeltaSeconds;
-			return;
-		}
-
-		const FVector Waypoint = PatrolOrigin + PatrolOffsets[PatrolIndex % PatrolOffsets.Num()];
-		if (MoveToward(Waypoint, DeltaSeconds, 90.f))
-		{
-			PatrolIndex = (PatrolIndex + 1) % PatrolOffsets.Num();
-			PatrolWaitRemaining = PatrolWaitTime;
-		}
-		break;
-	}
-
-	case EEOGuardState::Suspicious:
-		// Stop and look. Committing to a move on a half-sighting is what makes a
-		// guard feel twitchy rather than watchful.
-		if (Target)
-		{
-			const FVector Look = GetPursuitLocation() - GetActorLocation();
-			if (!Look.IsNearlyZero())
-			{
-				SetActorRotation(FRotator(0.f, Look.Rotation().Yaw, 0.f));
-			}
-		}
-		break;
-
-	case EEOGuardState::Alerted:
-	{
-		if (!Target)
-		{
-			break;
-		}
-
-		const FVector Pursue = GetPursuitLocation();
-		const FVector ToTarget = Pursue - GetActorLocation();
-		if (!ToTarget.IsNearlyZero())
-		{
-			SetActorRotation(FRotator(0.f, ToTarget.Rotation().Yaw, 0.f));
-		}
-
-		// Close to a useful range and hold there: the guard should stay dangerous
-		// without walking into the operative's knife.
-		if (ToTarget.Size2D() > PreferredCombatRange)
-		{
-			MoveToward(Pursue, DeltaSeconds, PreferredCombatRange);
-		}
-		break;
-	}
-
-	case EEOGuardState::Searching:
-		if (MoveToward(LastKnownTargetLocation, DeltaSeconds, 120.f))
-		{
-			// Arrived and found nothing: look around rather than standing still.
-			AddActorWorldRotation(FRotator(0.f, 60.f * DeltaSeconds, 0.f));
-		}
-		break;
-
-	default:
-		break;
-	}
 }
 
 // -------------------------------------------------------------------- weapon
@@ -771,6 +647,15 @@ void AEOGuardCharacter::ResetGuard()
 	{
 		Health->Revive();
 	}
+
+	// Last, once every field above is back to its starting value: the brain has
+	// to go back with the body. Resetting the fields alone leaves the tree in
+	// whatever state it reached, and it re-derives them on its next tick - a
+	// guard put back on patrol would quietly re-alert and keep shooting.
+	if (AEOGuardAIController* AI = Cast<AEOGuardAIController>(GetController()))
+	{
+		AI->RestartBrain();
+	}
 }
 
 // ------------------------------------------------------------------ animation
@@ -832,28 +717,8 @@ void AEOGuardCharacter::Tick(float DeltaSeconds)
 	// replace how the guard comes to know it.
 	UpdatePerception(DeltaSeconds);
 
-	// Deciding and acting belong to the tree when there is one. Assigning a tree
-	// is then the whole switch, and removing it is the whole revert.
-	if (!IsDrivenByStateTree())
-	{
-		UpdateState(DeltaSeconds);
-		UpdateMovement(DeltaSeconds);
-	}
-
-	// The weapon owns the rate of fire and counts its own cooldown down. The
-	// guard used to keep a second copy of both, which meant two numbers that had
-	// to agree.
-	if (!IsDrivenByStateTree()
-		&& State == EEOGuardState::Alerted && bTargetVisible && Weapon->IsReady()
-		&& FirstShotRemaining <= 0.f)
-	{
-		FireAtTarget();
-	}
-
-	if (!IsDrivenByStateTree())
-	{
-		FirstShotRemaining = FMath::Max(FirstShotRemaining - DeltaSeconds, 0.f);
-	}
-
+	// Deciding and acting belong to the tree. What it decides arrives back here
+	// as SetGuardState and the movement verbs, so the pawn still publishes what
+	// it is doing without being the thing that chose it.
 	UpdateAnimation();
 }

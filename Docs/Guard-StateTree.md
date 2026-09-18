@@ -45,14 +45,28 @@ behaviour without becoming the only place that knows what is happening.
    Order matters: the first state whose conditions pass is the one selected, so
    `Engage` must sit above `Suspicious`, and `Search` above `Patrol`.
 
-4. Transitions:
+4. Transitions. **Every one needs an explicit trigger.** A StateTree only picks
+   among children when it enters their parent - it does not re-evaluate enter
+   conditions each tick on its own - so a state with no outgoing transition is a
+   state the guard never leaves. Each row below is a transition on the state in
+   the first column, with trigger **On Tick** unless stated:
 
-   - `Engage` → on **State Completed**, go to `Search`.
-   - `Search` → on **State Completed**, go to `Patrol`. The search task succeeds
-     when it runs out, which is why it needs no timer condition of its own.
-   - Everything else re-evaluates from the root each tick, so `Patrol` and
-     `Suspicious` need no explicit transitions — a rising detection alpha will
-     select a higher state on its own.
+   | On state | Condition | Goes to |
+   |---|---|---|
+   | `Patrol` | EO Guard Detection At Least, `1.0` | `Engage` |
+   | `Patrol` | EO Guard Detection At Least, `0.01` | `Suspicious` |
+   | `Suspicious` | EO Guard Detection At Least, `1.0` | `Engage` |
+   | `Suspicious` | EO Guard Detection At Least, `0.01`, **Invert** ticked | `Patrol` |
+   | `Engage` | EO Guard Lost Contact, `3.0` | `Search` |
+   | `Search` | EO Guard Detection At Least, `1.0` | `Engage` |
+   | `Search` | *trigger* **On State Completed**, no condition | `Patrol` |
+
+   Order matters within a state: the first transition whose condition passes is
+   taken, so the `1.0` row must sit above the `0.01` row on both `Patrol` and
+   `Suspicious`, or a fully detected player only ever makes the guard suspicious.
+
+   `Search` needs no timer condition. Its task succeeds when the search runs out,
+   which is what the On State Completed row is catching.
 
 5. Assign the asset: open `BP_Guard`, select the AI controller class
    `EOGuardAIController`, and set **Brain Tree** to `ST_Guard`. If the Blueprint
