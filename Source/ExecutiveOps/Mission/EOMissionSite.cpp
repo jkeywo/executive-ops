@@ -2,6 +2,7 @@
 
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/LevelStreamingDynamic.h"
 #include "ExecutiveOps.h"
 
 AEOMissionSite::AEOMissionSite()
@@ -78,6 +79,103 @@ bool AEOMissionSite::IsWithinHoverVolume(const AActor* Actor) const
 FTransform AEOMissionSite::GetInsertionTransform() const
 {
 	return InsertionPoint ? InsertionPoint->GetComponentTransform() : GetActorTransform();
+}
+
+bool AEOMissionSite::IsArenaReady() const
+{
+	if (!HasArena())
+	{
+		return true;
+	}
+
+	return ArenaStreaming && ArenaStreaming->IsLevelVisible();
+}
+
+bool AEOMissionSite::IsWithinArenaLoadRadius(const AActor* Actor) const
+{
+	if (!Actor)
+	{
+		return false;
+	}
+
+	const float Radius = GetHoverRadius() * ArenaLoadRadiusScale;
+	return FVector::DistSquared(Actor->GetActorLocation(), GetHoverPoint()) <= Radius * Radius;
+}
+
+bool AEOMissionSite::IsOutsideArenaUnloadRadius(const AActor* Actor) const
+{
+	if (!Actor)
+	{
+		return true;
+	}
+
+	// Never narrower than the load radius, or the two could disagree about the
+	// same position and the level would load and unload on alternate frames.
+	const float Radius = GetHoverRadius() * FMath::Max(ArenaUnloadRadiusScale, ArenaLoadRadiusScale);
+	return FVector::DistSquared(Actor->GetActorLocation(), GetHoverPoint()) > Radius * Radius;
+}
+
+void AEOMissionSite::SetArenaRequested(bool bRequested)
+{
+	if (!HasArena())
+	{
+		return;
+	}
+
+	if (!ArenaStreaming)
+	{
+		if (!bRequested)
+		{
+			return;
+		}
+
+		// Location only. A rotated level transform would turn the guard's
+		// fixed-axis patrol offsets with it, and the site is placed axis-aligned.
+		const FTransform Anchor(GetInsertionTransform().GetLocation());
+
+		bool bLoaded = false;
+		ArenaStreaming = ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(
+			this, ArenaLevel, Anchor, bLoaded);
+
+		if (!bLoaded || !ArenaStreaming)
+		{
+			UE_LOG(LogExecutiveOps, Error, TEXT("Mission site %s could not stream arena %s."),
+				*GetName(), *ArenaLevel.ToString());
+			ArenaStreaming = nullptr;
+			return;
+		}
+
+		ArenaStreaming->OnLevelShown.AddDynamic(this, &AEOMissionSite::OnArenaShown);
+		ArenaStreaming->OnLevelUnloaded.AddDynamic(this, &AEOMissionSite::OnArenaUnloaded);
+
+		UE_LOG(LogExecutiveOps, Log, TEXT("Arena %s streaming in at %s."),
+			*ArenaLevel.GetAssetName(), *Anchor.GetLocation().ToCompactString());
+		return;
+	}
+
+	if (ArenaStreaming->ShouldBeLoaded() == bRequested)
+	{
+		return;
+	}
+
+	// The same streaming object is reused rather than removed and recreated: a
+	// stream-out followed by a stream-in gives a fresh copy of the level either
+	// way, and this keeps one handle to it for the life of the world.
+	ArenaStreaming->SetShouldBeLoaded(bRequested);
+	ArenaStreaming->SetShouldBeVisible(bRequested);
+
+	UE_LOG(LogExecutiveOps, Log, TEXT("Arena %s %s."),
+		*ArenaLevel.GetAssetName(), bRequested ? TEXT("requested") : TEXT("released"));
+}
+
+void AEOMissionSite::OnArenaShown()
+{
+	UE_LOG(LogExecutiveOps, Log, TEXT("Arena %s shown."), *ArenaLevel.GetAssetName());
+}
+
+void AEOMissionSite::OnArenaUnloaded()
+{
+	UE_LOG(LogExecutiveOps, Log, TEXT("Arena %s unloaded."), *ArenaLevel.GetAssetName());
 }
 
 void AEOMissionSite::OnMissionStateChanged_Implementation(EEOMissionState OldState, EEOMissionState NewState)

@@ -31,6 +31,11 @@ The region above a site inside which deployment is permitted. Entering it is wha
 makes the drop available.
 _Avoid_: trigger, drop zone
 
+**Arena**:
+The ground level streamed into the flight map at a site's insertion point while
+the aircraft is near it. Part of the city, not a map of its own.
+_Avoid_: mission map, sublevel, L_MissionTest
+
 ## The actors
 
 **Operative**:

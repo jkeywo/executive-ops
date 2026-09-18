@@ -144,6 +144,9 @@ protected:
 	/** Enables the aircraft's assist while the player is lined up over the site. */
 	void UpdateDeploymentAssist();
 
+	/** Streams the site's arena in as the aircraft nears it, and out as it leaves. */
+	void UpdateArenaStreaming(AEOMissionSite* Site);
+
 	/** Watches an inbound aircraft and performs the pickup when it arrives. */
 	void UpdateExtraction(float DeltaSeconds);
 

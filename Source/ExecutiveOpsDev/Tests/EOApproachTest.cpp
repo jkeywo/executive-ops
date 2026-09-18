@@ -152,6 +152,23 @@ void AEOApproachTest::Step()
 
 	case EPhase::Arrived:
 	{
+		// The arena was asked for when the craft entered the hover volume, and
+		// the drop is gated on it being shown, so give the stream time to land.
+		// The phase clock resets on every Wait, hence the separate counter.
+		if (Site && !Site->IsArenaReady() && ArenaWaitSeconds < ArenaWaitLimit)
+		{
+			ArenaWaitSeconds += ArenaWaitStep;
+			Wait(ArenaWaitStep);
+			return;
+		}
+
+		if (Site && Site->HasArena())
+		{
+			Check(Site->IsArenaReady(),
+				FString::Printf(TEXT("arena streams in at the site (%.2fs)"), ArenaWaitSeconds));
+			Check(GetExtractionZone() != nullptr, TEXT("arena actors are in the world"));
+		}
+
 		// Retargeting an underway mission is answered with a refusal below, and
 		// re-selecting the current site restarts nothing; both are warned about.
 		ExpectWarning(TEXT("Mission transition to InFlight rejected"));

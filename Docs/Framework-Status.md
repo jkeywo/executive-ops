@@ -47,7 +47,7 @@ and run in turn, so each ends with the world as it found it.
 | Milestone | Deliberately deferred |
 |---|---|
 | M1 Flight | Handling is functional, not tuned. Engine audio is a hook with no asset. |
-| M2 District | One district, greybox. No streaming or World Partition work. |
+| M2 District | One district, greybox. The site's arena streams in as a level instance (`Docs/adr/0009`); no World Partition work. |
 | M3 Deployment | One fixed socket, no insertion choice, no cloak, no mission timer. |
 | M4 Ground movement | No animation blueprint: clips are played single-node, so transitions pop. No wall running, grapple or dash. |
 | M5 Guard | One guard. No alert propagation, no shared knowledge, no cover system. |

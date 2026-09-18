@@ -475,6 +475,13 @@ FString AEOPlayerController::GetDeploymentBlocker() const
 		return FString::Printf(TEXT("fly to the marker (%.0fm)"), DistanceM);
 	}
 
+	// The arena is what the operative lands on. Entering the hover volume asked
+	// for it; the drop has to wait until it is actually there.
+	if (!Site->IsArenaReady())
+	{
+		return TEXT("site loading");
+	}
+
 	if (!IEOAircraftControlInterface::Execute_IsHovering(Aircraft))
 	{
 		return TEXT("switch to hover to deploy");
@@ -684,7 +691,7 @@ void AEOPlayerController::UpdateDeploymentAssist()
 		return;
 	}
 
-	const AEOMissionSite* Site = GetSelectedSite();
+	AEOMissionSite* Site = GetSelectedSite();
 
 	// The craft only helps once the player has brought it into the zone and
 	// committed to a hover. Outside that, it stays entirely in their hands.
@@ -694,6 +701,37 @@ void AEOPlayerController::UpdateDeploymentAssist()
 
 	IEOAircraftControlInterface::Execute_SetStationKeepTarget(
 		Aircraft, Site ? Site->GetHoverPoint() : FVector::ZeroVector, bAssist);
+
+	UpdateArenaStreaming(Site);
+}
+
+void AEOPlayerController::UpdateArenaStreaming(AEOMissionSite* Site)
+{
+	if (!Site || !Site->HasArena() || !Aircraft)
+	{
+		return;
+	}
+
+	// Once the player has committed to the drop the arena is where they live;
+	// only the approach is allowed to bring it in and let it go again.
+	const UEOMissionSubsystem* Mission = GetWorld()
+		? GetWorld()->GetSubsystem<UEOMissionSubsystem>() : nullptr;
+	if (Mission
+		&& Mission->GetMissionState() != EEOMissionState::Inactive
+		&& Mission->GetMissionState() != EEOMissionState::InFlight)
+	{
+		return;
+	}
+
+	if (Site->IsWithinArenaLoadRadius(Aircraft))
+	{
+		Site->SetArenaRequested(true);
+	}
+	else if (Site->IsOutsideArenaUnloadRadius(Aircraft))
+	{
+		Site->SetArenaRequested(false);
+	}
+	// Between the two radii nothing changes. That band is the hysteresis.
 }
 
 bool AEOPlayerController::RequestDeployment()

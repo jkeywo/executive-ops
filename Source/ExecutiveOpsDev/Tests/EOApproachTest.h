@@ -54,6 +54,11 @@ private:
 	/** How long the approach is given before its checks are sampled. */
 	static constexpr float ApproachSeconds = 32.f;
 
+	/** How long Arrived will hold for the arena to stream in before it checks. */
+	static constexpr float ArenaWaitLimit = 15.f;
+	static constexpr float ArenaWaitStep = 0.25f;
+
 	float DistanceSample = 0.f;
 	float AltitudeSample = 0.f;
+	float ArenaWaitSeconds = 0.f;
 };

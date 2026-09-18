@@ -149,4 +149,5 @@ The five interfaces named in M0's technical decisions:
 | Extraction | `IEOExtractionInterface` | nothing yet (M7) |
 
 Mission state is owned by a `UWorldSubsystem`, not the game mode, so it is reachable from
-anywhere and survives the eventual flight-map ↔ mission-map transition.
+anywhere. There is no map transition: the arena streams into the flight map at the
+site (`Docs/adr/0009`), so one world carries the whole mission.
