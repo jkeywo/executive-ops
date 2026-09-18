@@ -66,10 +66,11 @@ UnrealEditor-Cmd.exe ExecutiveOps.uproject -run=pythonscript -script="Scripts/m0
 
 ## Verifying the build
 
-An in-engine self-test drives the whole M0 loop and exits non-zero on failure:
+Functional tests placed in the maps drive the whole loop through Unreal's
+automation framework; the runner exits non-zero on failure:
 
 ```
-UnrealEditor-Cmd.exe ExecutiveOps.uproject /Game/Maps/L_FlightTest -game -nullrhi -unattended -EOSelfTest -EOSelfTestExit
+./Scripts/run_tests.ps1
 ```
 
 ## Controls

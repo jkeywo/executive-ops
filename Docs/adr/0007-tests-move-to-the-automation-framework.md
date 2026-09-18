@@ -17,8 +17,13 @@ retune during a feel pass no longer breaks the tests that are supposed to be
 guarding it.
 
 **Update.** The module split is done: `ExecutiveOpsDev`, marked `DeveloperTool`,
-holds the self-test and the cheats, and is excluded from Shipping while remaining
+holds the tests and the cheats, and is excluded from Shipping while remaining
 available in Development Game builds and the editor.
+
+**Done.** Every check has moved: nine world-free automation tests in the game
+module, five `AFunctionalTest` actors in the dev module placed in the two maps
+by `Scripts/place_functional_tests.py`, run together by `Scripts/run_tests.ps1`.
+`UEOSelfTest` and its command-line bootstrap are gone.
 
 The dependency inverts through two engine hooks rather than anything bespoke:
 `UCheatManager::RegisterForOnCheatManagerCreated` for the cheats, which become a

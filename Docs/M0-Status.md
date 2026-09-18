@@ -8,11 +8,11 @@ aircraft -> operative -> aircraft transition drives the mission state machine co
 > The project reliably boots into a test map and the player can possess either the
 > operative or a placeholder aircraft.
 
-Verified automatically. `Scripts/` builds the content, and an in-engine self-test
-exercises the loop:
+Verified automatically. `Scripts/` builds the content, and functional tests
+exercise the loop (originally an in-engine self-test; see `Docs/adr/0007`):
 
 ```bash
-UnrealEditor-Cmd.exe ExecutiveOps.uproject /Game/Maps/L_FlightTest -game -nullrhi -unattended -EOSelfTest -EOSelfTestExit
+./Scripts/run_tests.ps1
 ```
 
 19 checks, all passing, process exit code 0:
@@ -82,7 +82,7 @@ Per "do not build generalized frameworks beyond what the next milestones use":
   Until then `BP_Operative` has no skeletal mesh and the operative is invisible.
 - **The operative has no animation blueprint.** The mannequin is assigned but will
   T-pose. Locomotion is M4's job; M0 only required the packs be present.
-- **Input has not been verified by hand.** The self-test drives the loop through code,
+- **Input has not been verified by hand.** The tests drive the loop through code,
   so it proves the transitions and that bindings register without error — it does not
   prove that `W` moves the aircraft. Worth five minutes in PIE.
 - `AEOPlayerController` spawns an aircraft if the level contains none. `L_FlightTest`

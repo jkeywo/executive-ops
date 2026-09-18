@@ -74,7 +74,7 @@ behaviour without becoming the only place that knows what is happening.
    does not expose it, set `AIControllerClass` on `BP_Guard` to a Blueprint
    subclass of `EOGuardAIController` that carries the reference.
 
-6. Verify with `./Scripts/run_selftests.ps1`. The ground suite exercises all five
+6. Verify with `./Scripts/run_tests.ps1`. The GuardEncounter test exercises all five
    guard outcomes — patrol, stealth kill, detection, being shot at, losing
    contact — so it is a real check on the wiring rather than a smoke test. If the
    guard stands still, look for `could not path` in the log first: that is a

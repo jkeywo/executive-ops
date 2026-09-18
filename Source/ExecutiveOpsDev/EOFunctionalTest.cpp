@@ -104,8 +104,8 @@ void AEOFunctionalTest::Done()
 	const bool bPassed = Failures == 0;
 	const FString Summary = FString::Printf(TEXT("%d/%d checks passed"), Checks - Failures, Checks);
 
-	// Same line the self-test wrote, so anything grepping for a verdict still
-	// finds one - and so the two report identically while both exist.
+	// The line the self-test used to write, kept so a log still reads the same
+	// and anything grepping for a verdict still finds one.
 	UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] === %s (%s) ==="),
 		bPassed ? TEXT("PASSED") : TEXT("FAILED"), *Summary);
 

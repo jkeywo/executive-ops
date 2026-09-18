@@ -10,7 +10,7 @@
 /**
  * The first checks in this project that do not require playing the game.
  *
- * Everything else lives in UEOSelfTest, which is one 39-phase timed sequence: to
+ * Everything else lived in UEOSelfTest, which was one 39-phase timed sequence: to
  * assert anything about mission transitions you have to fly the approach first,
  * nothing can be run on its own, and an early failure takes the rest with it.
  * The mission state machine needs none of that - it is a validated transition

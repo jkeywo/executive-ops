@@ -418,10 +418,22 @@ timer after the sequence's last event is part of the sequence. The mission loop
 now waits for the re-arm and asserts it, which it should have anyway - being
 playable again is the point of M6.
 
-Converted so far, all in `L_MissionTest`: MissionLoop (48), GuardEncounter
-(35), Traversal (48). Remaining: the flight suite's clusters in `L_FlightTest`
-(boot, flight model, navigation, approach, deployment; 59 checks), then
-`UEOSelfTest` and its runner script go.
+**Done.** Five functional tests: MissionLoop (48), GuardEncounter (35) and
+Traversal (48) in `L_MissionTest`; FlightModel (27) and Approach (33) in
+`L_FlightTest`. 191 checks against the self-test's 186, the difference being
+the re-arm and the handed-back aircraft flying. `UEOSelfTest`, its post-login
+bootstrap and `run_selftests.ps1` are gone; `Scripts/run_tests.ps1` runs the
+world-free tests and the functional tests in one editor launch and reads the
+framework's own verdicts.
+
+- **[autonomous]** Warnings a sequence provokes on purpose - the mission
+  refusing an illegal transition, a retarget refused once deployed - are
+  declared with `ExpectWarning` (`AddExpectedMessagePlain` underneath) rather
+  than by turning warning-as-failure off for the test. The default caught two
+  real bugs on the first run; it stays on.
+- **[autonomous]** The mission map is committed as the scripts save it, with
+  no `RecastNavMesh`; the flight map commit also carries the author's own
+  editor save of it, since the placement script had to save on top of it.
 
 **C7 - the guard's AI.** *(perception and navigation in; the StateTree is not)*
 

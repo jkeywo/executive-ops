@@ -22,5 +22,4 @@ public:
 
 private:
 	FDelegateHandle CheatManagerHandle;
-	FDelegateHandle PostLoginHandle;
 };

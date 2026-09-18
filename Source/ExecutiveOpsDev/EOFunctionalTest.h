@@ -12,14 +12,15 @@ class AEOExtractionZone;
 class APawn;
 
 /**
- * A functional test that keeps the self-test's idiom.
+ * A functional test that keeps the old self-test's idiom.
  *
- * UEOSelfTest was one 39-phase timed sequence: to assert anything late in it
- * you ran everything before it, an early failure took the rest with it, and
- * nothing could be run alone. Its checks were good; its container was the
- * problem. This is the container replaced with the engine's - an actor placed
- * in a map, run by itself from the Session Frontend or headless, reporting
- * through the automation framework rather than a hand-rolled log scrape.
+ * UEOSelfTest, which this replaced, was one 39-phase timed sequence: to assert
+ * anything late in it you ran everything before it, an early failure took the
+ * rest with it, and nothing could be run alone. Its checks were good; its
+ * container was the problem. This is the container replaced with the engine's
+ * - an actor placed in a map, run by itself from the Session Frontend or
+ * headless, reporting through the automation framework rather than a
+ * hand-rolled log scrape. Scripts/run_tests.ps1 runs the lot.
  *
  * What it keeps: stepping on a fixed cadence with a dwell before a phase's
  * checks are sampled, because most of what needs proving is tick-driven. A
@@ -57,7 +58,7 @@ protected:
 	void Done();
 
 	/**
-	 * One assertion. Counted, logged in the self-test's format so the same eye
+	 * One assertion. Counted, logged in the old self-test's format so the same eye
 	 * reads both, and forwarded to the framework so a failure fails the test.
 	 */
 	bool Check(bool bCondition, const FString& What);

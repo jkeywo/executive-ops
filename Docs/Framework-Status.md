@@ -14,32 +14,33 @@ and start refining the verbs (M8).
 ## Verification
 
 ```bash
-./Scripts/run_selftests.ps1
+./Scripts/run_tests.ps1
 ```
 
-Module-level checks run separately, and individually, through Unreal's own
-automation framework - in the editor's Session Frontend, or headless:
+Everything runs through Unreal's own automation framework - in the editor's
+Session Frontend, or headless as above. Two kinds of test; see `Docs/adr/0007`.
 
-```bash
-UnrealEditor-Cmd.exe ExecutiveOps.uproject -ExecCmds="Automation RunTests ExecutiveOps+Quit" -unattended -nullrhi
-```
+**`ExecutiveOps.*`** - nine world-free checks on the mission subsystem, the
+weapon and the HUD view model: build the object, exercise it through its
+interface, tear it down, in about a second.
 
-These do not play the game: the mission checks build a bare world, exercise the
-subsystem through its interface and tear it down, in about a second. See
-`Docs/adr/0007`.
+**`Project.Functional Tests.*`** - `AFunctionalTest` actors placed in the maps
+by `Scripts/place_functional_tests.py`, each runnable on its own. 191 checks,
+stable across repeated runs.
 
-Two suites, because the flight sequence and the ground arena live in different
-maps. 186 checks total, stable across repeated runs.
-
-| Suite | Map | Checks | Covers |
+| Test | Map | Checks | Covers |
 |---|---|---|---|
-| flight | `L_FlightTest` | 59 | boot, flight model, navigation, the approach, deployment, handover |
-| ground | `L_MissionTest` | 127 | traversal, slide, the guard encounter, the mission run twice, extraction |
+| FlightModel | `L_FlightTest` | 27 | boot state, the deployment gate, illegal transitions, the flight model, the cockpit panel |
+| Approach | `L_FlightTest` | 33 | site selection, the steered approach, the drop, the aircraft held, the handover back |
+| Traversal | `L_MissionTest` | 48 | vault, mantle, climb, the negatives, the slide, the mesh staying on the capsule |
+| GuardEncounter | `L_MissionTest` | 35 | the five outcomes: takedown, being seen, being shot, shooting, breaking contact |
+| MissionLoop | `L_MissionTest` | 48 | the mission run twice with a reset between, and the re-arm after |
 
-The suites drive the game through its public interfaces and assert on real
-outcomes: the aircraft flies its own 268m approach, the operative rides the drop
-down, the guard encounter is exercised for all five outcomes, and the mission is
-completed twice with a reset in between.
+They drive the game through its public interfaces and assert on real outcomes:
+the aircraft flies its own 268m approach, the operative rides the drop down,
+the guard encounter is exercised for all five outcomes, and the mission is
+completed twice with a reset in between. The tests in one map share its world
+and run in turn, so each ends with the world as it found it.
 
 ## What each milestone left deliberately unbuilt
 
@@ -64,7 +65,7 @@ completed twice with a reset in between.
 - **The asset packs are not in source control** (several GB). Restore them with
   `Scripts/import_fab_assets.ps1`.
 - **Nothing has been played by a human.** Everything here is verified by the
-  self-test suites, which prove the systems do what they claim. They cannot
+  functional tests, which prove the systems do what they claim. They cannot
   tell you whether any of it is enjoyable - which is the only question M8 asks.
 
 ## Next
