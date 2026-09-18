@@ -47,6 +47,21 @@ DEST = "/Game/Animation"
 BS_DEST = DEST + "/BS_Locomotion"
 ABP_DEST = DEST + "/ABP_Operative"
 
+# The pack's graph plays five blend spaces, one per state. The first is the
+# walk/jog/run cycle; the other four are the foot-phased starts, stops and the
+# moving landing, each a spread of one-shot clips across speed. They are
+# distinct assets on purpose - a stop state pointed at the cycle plays the run
+# on the spot until its transition times out, which reads as jogging in place
+# for a second after letting go.
+BLEND_SPACES = {
+    # state graph name : (pack asset, project copy)
+    "WalkJogRun":    (PACK + "/InPlace/WalkJogRun",    BS_DEST),
+    "StartMoving":   (PACK + "/InPlace/StartMoving",   DEST + "/BS_StartMoving"),
+    "StopMovingL":   (PACK + "/InPlace/StopMovingL",   DEST + "/BS_StopMovingL"),
+    "StopMovingR":   (PACK + "/InPlace/StopMovingR",   DEST + "/BS_StopMovingR"),
+    "MobileLanding": (PACK + "/InPlace/MobileLanding", DEST + "/BS_MobileLanding"),
+}
+
 BP_OPERATIVE = "/Game/Blueprints/BP_Operative"
 
 # The graph's Blueprint variables that were fed by a cast to the pack's own demo
@@ -170,7 +185,7 @@ def clean_previous():
     if not FORCE_REBUILD:
         return
 
-    for path in (ABP_DEST, BS_DEST):
+    for path in [ABP_DEST] + [dst for _, dst in BLEND_SPACES.values()]:
         if EAL.does_asset_exist(path):
             if not EAL.delete_asset(path):
                 raise RuntimeError("could not delete {} - close the editor and retry".format(path))
@@ -198,17 +213,17 @@ def duplicate(src, dst):
     return asset
 
 
-def build_blend_space():
+def build_blend_space(src, dst):
     """
-    The project's own copy of the pack's walk/jog/run blend space.
+    The project's own copy of one of the pack's blend spaces.
 
-    Sample positions are left exactly as the pack authored them: X is lean
-    (-1..1) and Y is speed in cm/s, with samples at 180, 500 and 950. Those
-    numbers are the speeds the clips were actually captured at, which is what
-    stops the feet sliding - so the character's movement speeds are matched to
-    the blend space rather than the other way round.
+    Sample positions are left exactly as the pack authored them. For the
+    walk/jog/run cycle X is lean (-1..1) and Y is speed in cm/s, with samples
+    at 180, 500 and 950: the speeds the clips were actually captured at, which
+    is what stops the feet sliding - so the character's movement speeds are
+    matched to the blend space rather than the other way round.
     """
-    blend_space = duplicate(PACK + "/InPlace/WalkJogRun", BS_DEST)
+    blend_space = duplicate(src, dst)
 
     if not USE_ROOT_MOTION:
         return blend_space
@@ -227,8 +242,13 @@ def build_blend_space():
     blend_space.set_editor_property("sample_data", samples)
     EAL.save_loaded_asset(blend_space)
 
-    log("blend space: {}/{} samples repointed to root motion".format(swapped, len(samples)))
+    log("{}: {}/{} samples repointed to root motion".format(dst.rsplit("/", 1)[-1], swapped, len(samples)))
     return blend_space
+
+
+def build_blend_spaces():
+    """One project copy per state, keyed by the state graph that plays it."""
+    return {state: build_blend_space(src, dst) for state, (src, dst) in BLEND_SPACES.items()}
 
 
 AIM_BS = "/Game/Animation/BS_AimStrafe"
@@ -252,15 +272,31 @@ def tune_aim_blend_space():
         log("no {} yet; skipping aim smoothing".format(AIM_BS))
         return
 
-    if blend_space.get_editor_property("target_weight_interpolation_speed_per_sec") == AIM_WEIGHT_INTERP:
-        return
+    if blend_space.get_editor_property("target_weight_interpolation_speed_per_sec") != AIM_WEIGHT_INTERP:
+        blend_space.set_editor_property("target_weight_interpolation_speed_per_sec", AIM_WEIGHT_INTERP)
+        EAL.save_loaded_asset(blend_space)
+        log("aim blend space: target weight interpolation {}/s".format(AIM_WEIGHT_INTERP))
 
-    blend_space.set_editor_property("target_weight_interpolation_speed_per_sec", AIM_WEIGHT_INTERP)
-    EAL.save_loaded_asset(blend_space)
-    log("aim blend space: target weight interpolation {}/s".format(AIM_WEIGHT_INTERP))
+    # The pistol strafes are not in-place clips: the root travels ~270cm over a
+    # loop. The pack ships the straight ones with Force Root Lock on, which
+    # pins the root and makes them behave as in-place, and the four diagonals
+    # without it - so a 45-degree strafe carried the mesh off the capsule and
+    # snapped it back on release. Lock them all; root motion stays off.
+    locked = 0
+    for sample in blend_space.get_editor_property("sample_data"):
+        clip = sample.get_editor_property("animation")
+        if not clip or clip.get_editor_property("enable_root_motion"):
+            continue
+        if clip.get_editor_property("force_root_lock"):
+            continue
+        clip.set_editor_property("force_root_lock", True)
+        EAL.save_loaded_asset(clip)
+        locked += 1
+    if locked:
+        log("aim blend space: root locked {} clip(s)".format(locked))
 
 
-def build_anim_blueprint(blend_space):
+def build_anim_blueprint(blend_spaces):
     """
     The project's own copy of the pack's locomotion graph, repointed at the
     project's assets.
@@ -296,24 +332,32 @@ def build_anim_blueprint(blend_space):
         unreal.BlueprintEditorLibrary.reparent_blueprint(abp, native)
         log("graph reparented to UEOOperativeAnimInstance")
 
-    # Blend space players next. The pack's graph has one, driving the ground
-    # locomotion state, and it is repointed at the project's copy. Any player
-    # already aimed at something else - the hand-built Aim state's BS_AimStrafe -
-    # is somebody's authored work and is left alone.
-    pack_blend_space = EAL.load_asset(PACK + "/InPlace/WalkJogRun")
+    # Blend space players next, each repointed at the copy of whatever its
+    # state played in the pack. A player already aimed at something outside
+    # that set - the hand-built Aim state's BS_AimStrafe - is somebody's
+    # authored work and is left alone.
+    known = {EAL.load_asset(src) for src, _ in BLEND_SPACES.values()}
+    known.update(blend_spaces.values())
     repointed = 0
     for node in abp.get_nodes_of_class(unreal.AnimGraphNode_BlendSpacePlayer):
         inner = node.get_editor_property("node")
         current = inner.get_editor_property("blend_space")
-        if current is not None and current != pack_blend_space and current != blend_space:
+        state = node.get_outer().get_name()
+        wanted = blend_spaces.get(state)
+        if wanted is None:
+            log("  {}: no pack blend space for this state, leaving {}".format(state, current.get_name() if current else None))
             continue
-        if current == blend_space:
+        if current is not None and current not in known:
+            log("  {}: leaving authored {}".format(state, current.get_name()))
             continue
-        inner.set_editor_property("blend_space", blend_space)
+        if current == wanted:
+            continue
+        inner.set_editor_property("blend_space", wanted)
         node.set_editor_property("node", inner)
+        log("  {}: {} -> {}".format(state, current.get_name() if current else None, wanted.get_name()))
         repointed += 1
 
-    log("{} blend space player(s) repointed to {}".format(repointed, BS_DEST))
+    log("{} blend space player(s) repointed".format(repointed))
 
     if USE_ROOT_MOTION:
         swapped = 0
@@ -392,9 +436,9 @@ def main():
         detach_from_operative()
         clean_previous()
 
-    blend_space = build_blend_space()
+    blend_spaces = build_blend_spaces()
     tune_aim_blend_space()
-    abp = build_anim_blueprint(blend_space)
+    abp = build_anim_blueprint(blend_spaces)
     report_graph(abp)
     wire_to_operative(abp)
 

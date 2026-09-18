@@ -525,6 +525,17 @@ void AEOOperativeCharacter::UpdateFollowCamera(float DeltaSeconds)
 		return;
 	}
 
+	// Input is camera-relative, so the heading only differs from the view while
+	// the player holds a sideways component. Swinging behind that heading turns
+	// a strafe into a slow circle: the view rotates, the input rotates with it,
+	// and the operative never arrives. A sideways-led input pans instead - the
+	// boom follows the capsule and the yaw stays where the mouse left it. A
+	// forward-led input still brings the view round behind a veer.
+	if (FMath::Abs(LastMoveAxis.X) >= FMath::Abs(LastMoveAxis.Y))
+	{
+		return;
+	}
+
 	const FVector Flat = FVector(GetVelocity().X, GetVelocity().Y, 0.f);
 	const float Speed = Flat.Size();
 	if (Speed < CameraFollowMinSpeed)
@@ -956,6 +967,7 @@ void AEOOperativeCharacter::Input_Move(const FInputActionValue& Value)
 	// view round, and scripted code that sets the control rotation deliberately
 	// must not have it stolen back a frame later.
 	MoveInputHoldRemaining = MoveInputHoldTime;
+	LastMoveAxis = Axis;
 
 	// Move relative to where the camera is looking, flattened to the ground plane.
 	const FRotator YawOnly(0.f, Controller->GetControlRotation().Yaw, 0.f);

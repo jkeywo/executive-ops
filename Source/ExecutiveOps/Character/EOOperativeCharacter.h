@@ -473,6 +473,9 @@ private:
 	float HolsterDelayRemaining = 0.f;
 	float LookHoldRemaining = 0.f;
 	float MoveInputHoldRemaining = 0.f;
+
+	/** The last move axis, so the follow can tell steering from strafing. */
+	FVector2D LastMoveAxis = FVector2D::ZeroVector;
 	float TakedownRemaining = 0.f;
 
 	/**

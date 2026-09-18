@@ -77,7 +77,14 @@ one.
 
 ---
 
-## Speeds and the blend space
+## Speeds and the blend spaces
+
+The pack's graph plays five blend spaces, one per state, and the script copies
+all five: `BS_Locomotion` (the walk/jog/run cycle), `BS_StartMoving`,
+`BS_StopMovingL`, `BS_StopMovingR` and `BS_MobileLanding`. The last four are
+spreads of one-shot clips across speed, and they have to stay separate assets:
+a stop state pointed at the cycle plays the run on the spot until its
+transition times out, which is a second of jogging in place after letting go.
 
 `/Game/Animation/BS_Locomotion` keeps the pack's authored sample positions: X is
 lean (-1 to 1), Y is speed in cm/s, with clips at **180 (walk), 500 (jog) and
@@ -286,6 +293,12 @@ You author the blend space; the graph then gets one state.
    two clips mid-stride: a blink on every reversal. The prepare script sets the
    asset's **Target Weight Interpolation Speed** to 6/s, which eases the sample
    weights rather than the axis and keeps the ±180 wrap intact. Leave it set.
+
+   The same script turns on **Force Root Lock** on every clip in the space.
+   None of the pistol strafes are in-place: the root travels about 270cm over
+   a loop. The pack ships the straight ones locked and the four diagonals not,
+   so a 45° strafe carried the mesh off the capsule and snapped it back on
+   release.
 3. In the `Idle/Movement` state machine add a state **`Aim`** playing
    `BS_AimStrafe`, with **Direction** ← Get `Move Direction` and **Speed** ←
    Get `Ground Speed`.
