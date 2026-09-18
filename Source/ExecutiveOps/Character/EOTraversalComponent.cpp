@@ -1,5 +1,6 @@
 #include "Character/EOTraversalComponent.h"
 
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
 #include "Character/EOOperativeCharacter.h"
 #include "Components/CapsuleComponent.h"
@@ -71,6 +72,17 @@ float UEOTraversalComponent::DurationFor(EEOTraversalType Type) const
 	case EEOTraversalType::Mantle:	return MantleDuration;
 	case EEOTraversalType::Climb:	return ClimbDuration;
 	default:						return 0.f;
+	}
+}
+
+UAnimMontage* UEOTraversalComponent::MontageFor(EEOTraversalType Type) const
+{
+	switch (Type)
+	{
+	case EEOTraversalType::Vault:	return VaultMontage;
+	case EEOTraversalType::Mantle:	return MantleMontage;
+	case EEOTraversalType::Climb:	return ClimbMontage;
+	default:						return nullptr;
 	}
 }
 
@@ -423,17 +435,11 @@ void UEOTraversalComponent::Begin(const FEOTraversalQuery& Query)
 	}
 	Character->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	if (UAnimSequence* Anim = AnimationFor(Query.Type))
+	// Routed through the character so a traversal uses the same montage-or-clip
+	// rule as its other one-shots, rather than inventing a second one.
+	if (AEOOperativeCharacter* Operative = Cast<AEOOperativeCharacter>(Character))
 	{
-		if (USkeletalMeshComponent* Mesh = Character->GetMesh())
-		{
-			// Same gate as the character's own clips: an Animation Blueprint owns
-			// the pose when one is assigned, and PlayAnimation would tear it down.
-			if (Mesh->GetAnimationMode() == EAnimationMode::AnimationSingleNode)
-			{
-				Mesh->PlayAnimation(Anim, /*bLooping=*/false);
-			}
-		}
+		Operative->PlayActionAnimation(MontageFor(Query.Type), AnimationFor(Query.Type));
 	}
 
 	UE_LOG(LogExecutiveOps, Verbose, TEXT("Traversal: %s over %.0fcm"),

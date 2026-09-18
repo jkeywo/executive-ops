@@ -45,7 +45,11 @@ player and sequence players at the project's own copies.
 
 ```
 UnrealEditor-Cmd.exe ExecutiveOps.uproject -run=pythonscript -script="C:/Coding/executive-ops/Scripts/m9_prepare_animation.py"
+UnrealEditor-Cmd.exe ExecutiveOps.uproject -run=pythonscript -script="C:/Coding/executive-ops/Scripts/m9_build_montages.py"
 ```
+
+The second rebuilds the action montages and needs the graph's slot to exist, so
+run it after the first.
 
 Idempotent: it detaches the old graph from `BP_Operative`, deletes the previous
 duplicates in dependency order, and rebuilds. Add `-rootmotion` to repoint every
@@ -100,36 +104,42 @@ takedowns, landings.
 
 ---
 
-## What still needs the editor
+## One-shots: montages through the slot
 
-**The graph has no Slot node**, which means montages cannot play through it. That
-is the one thing Python cannot do, because it requires creating a node.
+Locomotion is a state machine; actions are montages. The graph's
+`Slot 'DefaultSlot'` node sits between the state machine and the output pose,
+which is what lets an action blend in over the legs rather than replacing the
+whole body the way `PlayAnimation` did.
 
-Until it exists, the one-shots are silent — they are gated off in code
-(`AEOOperativeCharacter::UsesDirectAnimationPlayback`) because `PlayAnimation`
-would switch the mesh back to single-node mode and throw the whole graph away.
-So **pistol fire, takedown, death, the vault/mantle/climb clips and the aim
-strafe set currently do not play.** Locomotion is correct; those are not.
+`Scripts/m9_build_montages.py` builds one montage per action from its source
+clip and assigns them to `BP_Operative`:
 
-### Adding the slot
+| Montage | Source clip | Blend in / out |
+|---|---|---|
+| `AM_Pistol_Fire` | `Pistol_shoot_01` | 0.05 / 0.15 |
+| `AM_Takedown` | `Anim_TA_ANG_hit_fist` | 0.10 / 0.25 |
+| `AM_Death` | `death_aim_chest_01` | 0.15 / 0.30 |
+| `AM_Vault` | `Vault_jog` | 0.08 / 0.20 |
+| `AM_Mantle` | `High_Ledge_Up_Crouch` | 0.10 / 0.25 |
+| `AM_Climb` | `Climb_scrambling_path` | 0.10 / 0.25 |
 
-1. Open `/Game/Animation/ABP_Operative`.
-2. In the **AnimGraph**, find the wire running from the `Idle/Movement` state
-   machine into **Output Pose**, and delete it.
-3. Right-click in the graph → search for **`Slot 'DefaultSlot'`** → place it.
-4. Wire the state machine's **Pose** output into the slot's **Source** input, and
-   the slot's output into **Output Pose**.
-5. Compile and save.
+Blend times are short on purpose: these are reactions, not performances, and a
+long blend on a pistol shot reads as the operative thinking about it.
 
-That alone restores nothing on its own — it is the socket the next step plugs
-into. Tell me once it is in and I will convert the one-shots to montages and
-re-enable them from C++, which is all automatable from there.
+The script refuses to run if the graph has no Slot node, because a montage
+played into a slot that is not sampled reports success and silently does
+nothing.
 
-### Optional, same visit
+`AEOOperativeCharacter::PlayActionAnimation(Montage, Fallback)` is the single
+rule for all of them: montage through the graph when there is a graph, direct
+clip when there is not. `EOTraversalComponent` calls the same function rather
+than keeping a second copy of it.
 
-- **Upper-body aiming.** A `Layered blend per bone` node from `spine_01` lets the
-  aim pose play over the legs, instead of replacing the whole body as the old
-  code did.
+### Still to do
+
+- **Upper-body aiming.** The aim strafe set is still unused. It wants a
+  `Layered blend per bone` node from `spine_01`, so the aim pose plays over the
+  legs rather than taking the whole body the way the old code did.
 - **Inertialization.** Setting the state machine's transitions to use
   inertialization rather than a standard blend removes the last of the pops on
   fast direction changes.

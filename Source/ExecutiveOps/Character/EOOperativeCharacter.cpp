@@ -1,5 +1,6 @@
 #include "Character/EOOperativeCharacter.h"
 
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
 #include "Character/EOTraversalComponent.h"
@@ -256,14 +257,7 @@ bool AEOOperativeCharacter::TryTakedown()
 	Victim->Takedown(this);
 
 	TakedownRemaining = TakedownDuration;
-	if (TakedownAnim && UsesDirectAnimationPlayback())
-	{
-		if (USkeletalMeshComponent* MeshComp = GetMesh())
-		{
-			MeshComp->PlayAnimation(TakedownAnim, false);
-			CurrentAnim = TakedownAnim;
-		}
-	}
+	PlayActionAnimation(TakedownMontage, TakedownAnim);
 
 	UE_LOG(LogExecutiveOps, Log, TEXT("Takedown on %s."), *Victim->GetName());
 	return true;
@@ -358,14 +352,7 @@ bool AEOOperativeCharacter::FireWeapon()
 		}
 	}
 
-	if (FireAnim && UsesDirectAnimationPlayback())
-	{
-		if (USkeletalMeshComponent* MeshComp = GetMesh())
-		{
-			MeshComp->PlayAnimation(FireAnim, false);
-			CurrentAnim = FireAnim;
-		}
-	}
+	PlayActionAnimation(FireMontage, FireAnim);
 
 	return true;
 }
@@ -386,14 +373,7 @@ void AEOOperativeCharacter::HandleDied(AActor* Killer)
 		Movement->DisableMovement();
 	}
 
-	if (DeathAnim && UsesDirectAnimationPlayback())
-	{
-		if (USkeletalMeshComponent* MeshComp = GetMesh())
-		{
-			MeshComp->PlayAnimation(DeathAnim, false);
-			CurrentAnim = DeathAnim;
-		}
-	}
+	PlayActionAnimation(DeathMontage, DeathAnim);
 
 	// A dead operative is a failed mission. M6 decides what happens next.
 	if (UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>())
@@ -682,6 +662,43 @@ bool AEOOperativeCharacter::UsesDirectAnimationPlayback() const
 	// project whose animation assets have not been prepared yet.
 	const USkeletalMeshComponent* MeshComp = GetMesh();
 	return MeshComp && MeshComp->GetAnimationMode() == EAnimationMode::AnimationSingleNode;
+}
+
+bool AEOOperativeCharacter::PlayActionAnimation(UAnimMontage* Montage, UAnimSequence* Fallback)
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp)
+	{
+		return false;
+	}
+
+	// With a graph in charge, a one-shot is a montage played into its slot: the
+	// legs keep running the locomotion state machine underneath, and the action
+	// blends in and out rather than replacing the whole body.
+	if (!UsesDirectAnimationPlayback())
+	{
+		if (!Montage)
+		{
+			return false;
+		}
+
+		if (UAnimInstance* AnimInstance = MeshComp->GetAnimInstance())
+		{
+			return AnimInstance->Montage_Play(Montage) > 0.f;
+		}
+
+		return false;
+	}
+
+	// Greybox fallback: no graph, so drive the clip directly.
+	if (!Fallback)
+	{
+		return false;
+	}
+
+	MeshComp->PlayAnimation(Fallback, false);
+	CurrentAnim = Fallback;
+	return true;
 }
 
 void AEOOperativeCharacter::UpdateLocomotionAnimation()

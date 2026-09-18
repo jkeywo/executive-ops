@@ -5,6 +5,7 @@
 #include "EOTraversalComponent.generated.h"
 
 class ACharacter;
+class UAnimMontage;
 class UAnimSequence;
 
 /** What the obstacle ahead turned out to be. */
@@ -145,6 +146,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traversal|Timing")
 	float ClimbDuration = 1.05f;
 
+	/** Played through the graph's slot when there is one. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traversal|Animation")
+	TObjectPtr<UAnimMontage> VaultMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traversal|Animation")
+	TObjectPtr<UAnimMontage> MantleMontage;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traversal|Animation")
+	TObjectPtr<UAnimMontage> ClimbMontage;
+
 	/** Animations, assigned in the Blueprint from the owned packs. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Traversal|Animation")
 	TObjectPtr<UAnimSequence> VaultAnim;
@@ -185,6 +196,7 @@ private:
 	ACharacter* GetCharacter() const;
 	float DurationFor(EEOTraversalType Type) const;
 	UAnimSequence* AnimationFor(EEOTraversalType Type) const;
+	UAnimMontage* MontageFor(EEOTraversalType Type) const;
 
 	UPROPERTY(Transient)
 	FEOTraversalQuery ActiveQuery;

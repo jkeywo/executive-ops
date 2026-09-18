@@ -6,6 +6,7 @@
 #include "Interfaces/EODeployableInterface.h"
 #include "EOOperativeCharacter.generated.h"
 
+class UAnimMontage;
 class UAnimSequence;
 class UCameraComponent;
 class UStaticMeshComponent;
@@ -88,6 +89,7 @@ protected:
 	UFUNCTION(BlueprintPure, Category = "Animation")
 	bool UsesDirectAnimationPlayback() const;
 
+
 	void TickSlide(float DeltaSeconds);
 
 	/**
@@ -163,6 +165,17 @@ protected:
 	/** Upper bound on interaction range; each interactable may ask for less. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Interaction")
 	float MaxInteractionRange = 600.f;
+
+	// Montages are what the Animation Blueprint plays; the sequences below remain
+	// as the fallback for a project with no graph prepared yet.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimMontage> TakedownMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimMontage> FireMontage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
+	TObjectPtr<UAnimMontage> DeathMontage;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Combat|Animation")
 	TObjectPtr<UAnimSequence> TakedownAnim;
@@ -409,6 +422,16 @@ public:
 	/** True during the takedown animation, when the player is committed. */
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	bool IsPerformingTakedown() const { return TakedownRemaining > 0.f; }
+
+	/**
+	 * Plays a one-shot action: as a montage through the graph's slot when there
+	 * is a graph, and as a direct clip when there is not.
+	 *
+	 * Public because the traversal component plays its own clips through it,
+	 * rather than keeping a second copy of the same rule.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Animation")
+	bool PlayActionAnimation(UAnimMontage* Montage, UAnimSequence* Fallback);
 
 private:
 	const UEOInputConfig* GetInputConfig() const;
