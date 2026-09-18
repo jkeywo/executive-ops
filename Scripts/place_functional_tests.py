@@ -28,6 +28,8 @@ TESTS = [
     ("/Game/Maps/L_MissionTest", "MissionLoop", "EOMissionLoopTest"),
     ("/Game/Maps/L_MissionTest", "GuardEncounter", "EOGuardEncounterTest"),
     ("/Game/Maps/L_MissionTest", "Traversal", "EOTraversalTest"),
+    ("/Game/Maps/L_FlightTest", "FlightModel", "EOFlightModelTest"),
+    ("/Game/Maps/L_FlightTest", "Approach", "EOApproachTest"),
 ]
 
 # Out of the way of the arena: nothing here needs to be anywhere in particular,

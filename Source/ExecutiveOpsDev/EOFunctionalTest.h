@@ -62,6 +62,16 @@ protected:
 	 */
 	bool Check(bool bCondition, const FString& What);
 
+	/**
+	 * Declares a warning this sequence is about to provoke on purpose.
+	 *
+	 * The framework fails a test on any warning logged while it runs, which is
+	 * the right default; a check that asks the mission to do something illegal
+	 * and asserts the refusal has to say so first. Called before the step that
+	 * provokes it, with the number of times it is expected.
+	 */
+	void ExpectWarning(const FString& Contains, int32 Occurrences = 1) const;
+
 	int32 GetPhase() const { return Phase; }
 	float GetPhaseElapsed() const { return PhaseElapsed; }
 

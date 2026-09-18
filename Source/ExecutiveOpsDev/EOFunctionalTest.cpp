@@ -14,6 +14,7 @@
 
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Misc/AutomationTest.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
 
@@ -41,9 +42,10 @@ bool AEOFunctionalTest::IsReady_Implementation()
 
 	// The navmesh is generated at runtime. A sequence sampled while it is still
 	// building sees a guard that cannot path, which is a fact about the first
-	// second of the session rather than about the guard.
+	// second of the session rather than about the guard. A map with nothing to
+	// navigate has no navigation system at all, and is ready as it is.
 	UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-	return Nav && !Nav->IsNavigationBuildInProgress();
+	return !Nav || !Nav->IsNavigationBuildInProgress();
 }
 
 void AEOFunctionalTest::StartTest()
@@ -128,6 +130,15 @@ bool AEOFunctionalTest::Check(bool bCondition, const FString& What)
 	// Forwarded so the framework's own report carries every assertion, not just
 	// the summary - a failure is then visible in the Session Frontend by name.
 	return AssertTrue(bCondition, What);
+}
+
+void AEOFunctionalTest::ExpectWarning(const FString& Contains, int32 Occurrences) const
+{
+	if (FAutomationTestBase* Current = FAutomationTestFramework::Get().GetCurrentTest())
+	{
+		Current->AddExpectedMessagePlain(Contains, ELogVerbosity::Warning,
+			EAutomationExpectedMessageFlags::Contains, Occurrences);
+	}
 }
 
 // ---- Finders -------------------------------------------------------------------
