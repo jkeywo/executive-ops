@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AITypes.h"
 #include "GameFramework/Character.h"
 #include "EOGuardCharacter.generated.h"
 
@@ -240,6 +241,15 @@ private:
 	float SearchRemaining = 0.f;
 	/** Delay after being alerted, before the first shot. Not the fire rate. */
 	float FirstShotRemaining = 0.f;
+
+	/** Where the current path was requested to. Invalid when not moving. */
+	FVector MoveGoal = FAISystem::InvalidLocation;
+
+	/** So a missing navmesh is reported once rather than every frame. */
+	bool bWarnedPathFailure = false;
+
+	/** How far a destination must move before the path is worth re-requesting. */
+	float MoveGoalTolerance = 100.f;
 
 	bool bTargetVisible = false;
 };

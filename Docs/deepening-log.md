@@ -290,12 +290,39 @@ into `AFunctionalTest`s. The module split is done; what remains is the checks
 themselves, which is mechanical but large, and best done a cluster at a time
 behind the interfaces this pass created.
 
-**C7 - the guard's AI.** Untouched. Perception, StateTree, AIController and
-navmesh together are a rewrite of the one system whose current shape is
-deliberate and documented, inside a milestone defined as adding no features. It
-is the largest scope expansion of the eight and the one I would most want the
-author awake for. `Docs/adr/0005` records the decision to do it and why that
-contradicts the milestone doc.
+**C7 - the guard's AI.** *(perception and navigation in; the StateTree is not)*
+
+Confirmed by the author before starting, having seen `Docs/adr/0005` and the fact
+that it contradicts the milestone document.
+
+Sight is a `UAIPerceptionComponent` on `AEOGuardAIController`. No part of the
+guard walks the actor list any more - it used to be every actor in the world, per
+guard, per frame, followed by three hand-rolled tests. The operative registers
+explicitly as a stimuli source rather than the project auto-registering every
+pawn, because the aircraft is a pawn too.
+
+- **[autonomous]** The close-range rule stayed in the guard. Noticing someone
+  within 350 units regardless of facing is deliberately cone-independent and
+  sight cannot express it, and it is load-bearing rather than decorative:
+  `TakedownRange` is 220, so dropping it would quietly change the stealth
+  behaviour the encounter checks cover. It now tests one candidate rather than
+  the world.
+- **[autonomous]** The sight cone is configured from the pawn's own tuning on
+  possession rather than duplicated on the controller, so a guard is still
+  retuned in one place.
+- Navigation replaces direct steering: `MoveToLocation` through the controller,
+  with a navmesh bounds volume added to the ground map. The path is only
+  re-requested when the destination actually moves - reissuing every frame
+  discards the path being followed and makes the guard stutter on the spot.
+- **[autonomous]** The navmesh generates at runtime (`RuntimeGeneration=Dynamic`)
+  rather than relying on a built static one, because the suites launch headless
+  into `-game` where nothing rebuilds it. The bounds volume was added by a
+  targeted script rather than by re-running `m0_setup.py`, which regenerates both
+  maps and rewrites Blueprint defaults - that would have taken the animation
+  graph wiring with it.
+
+**Still to do:** the StateTree. The guard's five states remain a C++ enum, which
+is the part of `Docs/adr/0005` not yet honoured.
 
 ## Suggested order for the rest
 

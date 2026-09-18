@@ -2,6 +2,8 @@
 
 #include "Animation/AnimSequence.h"
 #include "Character/EOOperativeCharacter.h"
+#include "AIController.h"
+#include "Navigation/PathFollowingComponent.h"
 #include "Combat/EOGuardAIController.h"
 #include "Combat/EOHealthComponent.h"
 #include "Combat/EOWeaponComponent.h"
@@ -378,12 +380,49 @@ bool AEOGuardCharacter::MoveToward(const FVector& TargetLocation, float DeltaSec
 	const FVector ToTarget = TargetLocation - GetActorLocation();
 	const FVector Flat(ToTarget.X, ToTarget.Y, 0.f);
 
-	if (Flat.SizeSquared() <= AcceptRadius * AcceptRadius)
+	const bool bArrived = Flat.SizeSquared() <= AcceptRadius * AcceptRadius;
+
+	AAIController* AI = Cast<AAIController>(GetController());
+	if (!AI)
 	{
+		// No controller to path with: steer directly, as this always used to.
+		// Reachable in the editor preview and before possession settles.
+		if (!bArrived)
+		{
+			AddMovementInput(Flat.GetSafeNormal());
+		}
+		return bArrived;
+	}
+
+	if (bArrived)
+	{
+		AI->StopMovement();
+		MoveGoal = FAISystem::InvalidLocation;
 		return true;
 	}
 
-	AddMovementInput(Flat.GetSafeNormal());
+	// Only ask for a path when the destination actually moves. Reissuing every
+	// frame throws away the path being followed and requests another, which both
+	// costs a query per frame and makes the guard stutter on the spot.
+	if (!FAISystem::IsValidLocation(MoveGoal)
+		|| FVector::DistSquared(MoveGoal, TargetLocation) > FMath::Square(MoveGoalTolerance))
+	{
+		MoveGoal = TargetLocation;
+
+		const EPathFollowingRequestResult::Type Result = AI->MoveToLocation(
+			TargetLocation, AcceptRadius, /*bStopOnOverlap=*/true, /*bUsePathfinding=*/true);
+
+		// A guard that cannot path stands still and says nothing, which reads as
+		// a broken encounter rather than a missing navmesh. Say it once.
+		if (Result == EPathFollowingRequestResult::Failed && !bWarnedPathFailure)
+		{
+			bWarnedPathFailure = true;
+			UE_LOG(LogExecutiveOps, Warning,
+				TEXT("Guard %s could not path to %s - is there a navmesh over the arena?"),
+				*GetName(), *TargetLocation.ToString());
+		}
+	}
+
 	return false;
 }
 
