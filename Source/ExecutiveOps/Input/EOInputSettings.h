@@ -26,6 +26,16 @@ class EXECUTIVEOPS_API UEOInputSettings : public UDeveloperSettings
 	GENERATED_BODY()
 
 public:
+	/**
+	 * The actions and mapping contexts the pawns bind to.
+	 *
+	 * Built by Scripts/build_input_assets.py. Loaded once at controller start;
+	 * it is a handful of small assets and nothing can take input before it is
+	 * resident, so there is no hitch to hide by loading it asynchronously.
+	 */
+	UPROPERTY(config, EditAnywhere, Category = "Bindings")
+	TSoftObjectPtr<class UEOInputConfig> InputConfig;
+
 	/** Invert vertical mouse look, relative to the standard scheme. */
 	UPROPERTY(config, EditAnywhere, Category = "Look")
 	bool bInvertMouseY = false;

@@ -125,7 +125,7 @@ public:
 
 protected:
 	/**
-	 * Input config is built here rather than in BeginPlay: the game mode possesses
+	 * Input config is loaded here rather than in BeginPlay: the game mode possesses
 	 * the default pawn before BeginPlay runs, and that pawn's
 	 * SetupPlayerInputComponent needs the config to already exist.
 	 */

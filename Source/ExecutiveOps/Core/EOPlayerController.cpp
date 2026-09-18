@@ -10,6 +10,7 @@
 #include "EngineUtils.h"
 #include "ExecutiveOps.h"
 #include "Input/EOInputConfig.h"
+#include "Input/EOInputSettings.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Interfaces/EODeployableInterface.h"
 #include "Mission/EOMissionSite.h"
@@ -31,8 +32,19 @@ void AEOPlayerController::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 
-	InputConfig = NewObject<UEOInputConfig>(this, TEXT("EOInputConfig"));
-	InputConfig->BuildRuntimeInput();
+	// Loaded, not constructed. The config used to be built with NewObject on
+	// every run, which is why nothing set on it in the editor could ever take
+	// effect. It is a handful of small assets and no pawn can take input until
+	// it is resident, so there is no hitch here for an async load to hide.
+	InputConfig = UEOInputSettings::Get().InputConfig.LoadSynchronous();
+	if (!InputConfig)
+	{
+		// A controller with no bindings is a game that does not respond to the
+		// player. Say so once, loudly, rather than leaving it to be discovered.
+		UE_LOG(LogExecutiveOps, Error,
+			TEXT("No input config assigned in Executive Ops - Input settings; "
+				 "run Scripts/build_input_assets.py and point InputConfig at its output."));
+	}
 }
 
 void AEOPlayerController::BeginPlay()
