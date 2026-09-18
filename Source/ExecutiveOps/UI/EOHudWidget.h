@@ -48,6 +48,14 @@ public:
 	static FLinearColor ColourForTone(EEOHudTone Tone);
 
 protected:
+	/**
+	 * A HUD is a readout, never a control. Whatever the layout is built from,
+	 * none of it may take the click that gives the game viewport mouse capture
+	 * - a full-screen Border left Visible is a game that ignores every key.
+	 */
+	virtual void NativeOnInitialized() override;
+
+protected:
 	// ---- 1  Asset -----------------------------------------------------------------
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> AssetCaption;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> AssetMode;

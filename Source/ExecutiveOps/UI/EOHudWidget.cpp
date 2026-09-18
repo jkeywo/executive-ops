@@ -20,6 +20,16 @@ FLinearColor UEOHudWidget::ColourForTone(EEOHudTone Tone)
 	}
 }
 
+void UEOHudWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+
+	// HitTestInvisible covers the whole subtree; SelfHitTestInvisible, the
+	// default for a UserWidget, only covers the root and leaves every Border and
+	// Image the designer added at their own default of Visible.
+	SetVisibility(ESlateVisibility::HitTestInvisible);
+}
+
 void UEOHudWidget::SetText(UTextBlock* Block, const FText& Text, EEOHudTone Tone)
 {
 	if (!Block)

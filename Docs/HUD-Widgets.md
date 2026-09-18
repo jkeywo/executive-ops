@@ -31,7 +31,10 @@ thing.
    parent class, pick **EOHudWidget**. Save it as `/Game/UI/WBP_HUD`.
 
 2. Lay out a Canvas Panel with the eight slots in the positions the design
-   gives them:
+   gives them. Use whatever you like for backgrounds and frames; the widget
+   sets itself `HitTestInvisible` on initialise, so nothing in it can take
+   the click that gives the viewport mouse capture. (A Border left at its
+   default `Visible` did exactly that once, and every key went nowhere.)
 
    ```
    1 asset (top left)    2 bearing (top centre)   3 standing (top right)
