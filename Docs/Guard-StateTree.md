@@ -6,9 +6,10 @@ compiler that turns editor data into a runnable tree lives in
 `StateTreeEditorModule/Private` with no scripting hook, so this is the one part
 of `Docs/adr/0005` that has to be done by hand.
 
-Until a tree is assigned the guard behaves exactly as it always has: its C++
-state machine still runs, and every encounter check passes. Assigning a tree is
-the whole switch, and clearing it is the whole revert.
+The tree is the guard's only brain. The C++ state machine it replaced has been
+removed, so a guard with no tree assigned does nothing but perceive - it will not
+patrol, alert or shoot. If a guard stands still, check that `BrainTree` is set on
+its controller before looking anywhere else.
 
 ## What already exists
 

@@ -357,6 +357,8 @@ putting the pawn back is only half of it.
 
 ## Suggested order for the rest
 
-C4's conversion, then C3, then C7. C4's conversion makes every later change safer
-to verify, and the two test files added here show the pattern to follow. C3 and
-C7 are both asset-authoring jobs and are better done with the editor open.
+C3's widgets, then C8's input assets, then C4's conversion. C3 and C8 are both
+asset-authoring jobs that batch naturally in one editor session, and the gather
+seam and the settings object are already in place for each. C4's conversion is
+mechanical and the two test files show the pattern, but the suites already pass,
+so it is the lowest-value of the three.
