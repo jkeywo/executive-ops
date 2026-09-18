@@ -313,12 +313,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Deployment")
 	float DropTimeout = 6.f;
 
-	/** Placeholder values. Tuning belongs in M8, not here. */
+	/**
+	 * Matched to the locomotion blend space, not chosen freely: its samples are
+	 * authored at 180 (walk), 500 (jog) and 950 (run) cm/s, the speeds the clips
+	 * were captured at. Land on a sample and the feet do not slide; sit between
+	 * two and they do. 500 is the jog sample, 950 the run.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement")
 	float WalkSpeed = 500.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement")
-	float SprintSpeed = 850.f;
+	float SprintSpeed = 950.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
 	float LookSensitivity = 1.f;

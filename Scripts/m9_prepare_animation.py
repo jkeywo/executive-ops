@@ -49,6 +49,16 @@ ABP_DEST = DEST + "/ABP_Operative"
 
 BP_OPERATIVE = "/Game/Blueprints/BP_Operative"
 
+# The graph's Blueprint variables that were fed by a cast to the pack's own demo
+# character. Our pawn is not that class, the cast always fails, and these sit at
+# zero - which is why every jump read as a leap. Defaults keep the graph sane
+# until the event graph is rewired to read the C++ anim instance instead.
+DEAD_CAST_DEFAULTS = {
+    # Above the run speed (950): takeoff always reads as a jump, and the dive is
+    # reached by falling far enough rather than by leaving the ground fast.
+    "SpeedRequiredForLeap": 1200.0,
+}
+
 # Root motion is opt-in: pass -rootmotion.
 #
 # The pack ships every clip twice, in-place and root-motion. In-place plus the
@@ -242,6 +252,21 @@ def build_anim_blueprint(blend_space):
     abp.set_editor_property("target_skeleton", ours)
     log("graph retargeted to " + OUR_SKELETON)
 
+    # Parent the graph to the C++ anim instance, which computes what the pack's
+    # graph used to read off its demo character: speed, lean, stop speed, the
+    # leap threshold, aiming, and how far a fall has gone.
+    #
+    # Reparenting alone changes nothing visible - the graph still reads its own
+    # Blueprint variables until the event graph is rewired to the C++ properties.
+    # It makes those properties available to the rewiring, and it is idempotent.
+    native = unreal.EOOperativeAnimInstance
+    parent = unreal.BlueprintEditorLibrary.get_blueprint_parent_class(abp)
+    # Compared by name: the class objects are distinct wrappers, and comparing
+    # them reparents on every run, which is harmless but reads as a change.
+    if parent is None or parent.get_name() != native.get_name():
+        unreal.BlueprintEditorLibrary.reparent_blueprint(abp, native)
+        log("graph reparented to UEOOperativeAnimInstance")
+
     # Blend space players first: there is only one in the pack's graph, driving
     # the ground locomotion state.
     for node in abp.get_nodes_of_class(unreal.AnimGraphNode_BlendSpacePlayer):
@@ -269,18 +294,37 @@ def build_anim_blueprint(blend_space):
         log("{} sequence players repointed to root motion".format(swapped))
 
     unreal.BlueprintEditorLibrary.compile_blueprint(abp)
+
+    # Variable defaults live on the generated class, so this has to follow the
+    # compile that (re)generates it.
+    cdo = unreal.get_default_object(abp.generated_class())
+    for name, value in DEAD_CAST_DEFAULTS.items():
+        try:
+            cdo.set_editor_property(name, value)
+            log("graph default {} = {}".format(name, value))
+        except Exception as error:
+            log("could not set graph default {}: {}".format(name, str(error)[:80]))
+
     EAL.save_loaded_asset(abp, only_if_is_dirty=False)
     return abp
 
 
 def report_graph(abp):
-    """What the duplicated graph actually contains, so the result is checkable."""
+    """
+    What the duplicated graph actually contains, so the result is checkable.
+
+    Play rate and clip length together answer "why is the fall so slow": a rate
+    below 1.0 is fixable here, a long floaty clip at 1.0 is the wrong clip.
+    """
     for node in abp.get_nodes_of_class(unreal.AnimGraphNode_SequencePlayer):
         inner = node.get_editor_property("node")
         clip = inner.get_editor_property("sequence")
         if clip:
-            log("  plays {} (loop={})".format(
-                clip.get_name(), inner.get_editor_property("loop_animation")))
+            log("  plays {} (loop={}, rate={:.2f}, length={:.2f}s)".format(
+                clip.get_name(),
+                inner.get_editor_property("loop_animation"),
+                inner.get_editor_property("play_rate"),
+                clip.get_editor_property("sequence_length")))
 
 
 def wire_to_operative(abp):

@@ -86,11 +86,11 @@ lean (-1 to 1), Y is speed in cm/s, with clips at **180 (walk), 500 (jog) and
 Those are the speeds the clips were actually captured at, and that is what stops
 the feet sliding — the character's speeds should be matched to the blend space,
 not the other way round. Currently `WalkSpeed` is 500 (lands exactly on the jog
-sample) and `SprintSpeed` is 850 (blends jog toward run).
+sample) and `SprintSpeed` is **950**, exactly the run sample — at 850 a sprint
+sat 78% of the way from jog to run and never arrived.
 
-Nothing currently drives the character below 500, so the walk clip is never
-reached. A walk modifier or analogue stick input would open up the lower half of
-the space.
+Nothing drives the character below 500, so the walk clip is never reached; a
+walk modifier or analogue input would open up the lower half of the space.
 
 ---
 
@@ -152,9 +152,8 @@ than keeping a second copy of it.
 
 ### Still to do
 
-- **Upper-body aiming.** The aim strafe set is still unused. It wants a
-  `Layered blend per bone` node from `spine_01`, so the aim pose plays over the
-  legs rather than taking the whole body the way the old code did.
+- **Aiming** — see *Editor steps, C* below. A full aim strafe set rather than an
+  upper-body layer, so the legs read the strafe too.
 - **Inertialization.** Setting the state machine's transitions to use
   inertialization rather than a standard blend removes the last of the pops on
   fast direction changes.
@@ -163,15 +162,130 @@ than keeping a second copy of it.
 
 ## Driving the graph from C++
 
-The pack's graph computes its own variables (`Speed`, `IsInAir?`, `IsMoving`,
-`IsAccelerating`, `LateralSpeed`, `StopL`, `IsLandingWhileMobile`) from the pawn
-in its event graph, so no C++ anim instance is needed yet.
+`ABP_Operative` is parented to **`UEOOperativeAnimInstance`**
+(`Source/ExecutiveOps/Character/EOOperativeAnimInstance.h`), which computes
+everything the graph needs in `NativeThreadSafeUpdateAnimation`.
 
-If the graph later needs game state it cannot read off the movement component —
-sprinting, aiming, sliding, traversing — the idiomatic route is a C++
-`UAnimInstance` subclass computing them in a thread-safe update, with the graph
-reparented to it. That keeps the casts out of the event graph and the state out
-of the graph's head.
+### Why
+
+The pack's graph fed its own variables from a **`Cast To ThirdPersonCharacter`**
+— the pack's demo character. Our pawn is `BP_Operative`, so that cast always
+fails, and every variable on its success path sat frozen at zero:
+
+| Frozen variable | Effect |
+|---|---|
+| `Speed` | the blend space never left the idle sample — no jog, no run |
+| `SpeedRequiredForLeap` | 0, so every takeoff cleared it and took the `LeapStart → LeapLoop` branch: a 2.4s wind-up into a 2s dive loop, which is the "uncontrolled, slow" fall |
+| `LateralSpeed`, `SpeedWhenStopping` | no lean, wrong stop foot |
+
+`IsInAir?` alone was correct — it comes from a separate `GetMovementComponent →
+IsFalling` chain that does not go through the cast.
+
+### What the anim instance exposes
+
+| Property | Meaning | Feeds |
+|---|---|---|
+| `GroundSpeed` | cm/s | `Speed` |
+| `LeanAmount` | −1..1 from turn rate, eased | `LateralSpeed` (the blend space's X axis is a lean, not cm/s) |
+| `StoppingSpeed` | speed held while accelerating, frozen on release | `SpeedWhenStopping` |
+| `bAccelerating`, `bMoving`, `bInAir` | — | `IsAccelerating`, `IsMoving`, `IsInAir?` |
+| `LeapSpeedThreshold` | 1200, above run speed on purpose | `SpeedRequiredForLeap` |
+| `MoveDirection` | travel relative to facing, −180..180 | the aim strafe blend space |
+| `bIsAiming`, `bIsSprinting`, `bIsSliding` | character state | the Aim state's transitions |
+| `FallHeight`, `TimeFalling`, **`bIsLongFall`** | how far the drop has gone | the jump → dive transition |
+
+`bIsLongFall` is the fall fix: a takeoff always plays the controlled jump, and
+only a fall that goes past `LongFallHeight` (350cm) or `LongFallTime` (0.6s)
+switches to the dive. The pack decided that once, on takeoff, from horizontal
+speed; this decides it while falling, from distance.
+
+Property names deliberately do not collide with the graph's own variables, so
+the nine transition rules that reference those by name are untouched. The event
+graph sets the Blueprint variables from the C++ ones — which is the rewiring
+below.
+
+Until the rewiring is done the graph runs on defaults the prepare script sets on
+it (`SpeedRequiredForLeap` = 1200), which is enough to stop jumps diving. It is
+not enough to make the operative run: `Speed` still needs feeding.
+
+---
+
+## Editor steps
+
+Python cannot create nodes or wire pins. Everything else above is done. What
+follows is the node work, in `/Game/Animation/ABP_Operative` unless stated.
+
+### A. Feed the graph from C++ (fixes run, lean, stops)
+
+In the **Event Graph**:
+
+1. Find `Cast To ThirdPersonCharacter`. Delete it, and delete every node that
+   was wired to its `As Third Person Character` output. Leave `TryGetPawnOwner`
+   and the `IsValid → GetMovementComponent → IsFalling → SET IsInAir?` chain —
+   that one works.
+2. On the `Event Blueprint Update Animation` exec line, after `SET IsInAir?`,
+   add four **SET** nodes and feed each from a **Get** of the matching C++
+   property (right-click → search the property name; they are on `self`):
+
+   | SET | ← Get |
+   |---|---|
+   | `Speed` | `Ground Speed` |
+   | `Lateral Speed` | `Lean Amount` |
+   | `Speed When Stopping` | `Stopping Speed` |
+   | `Speed Required for Leap` | `Leap Speed Threshold` |
+
+   If `Is Accelerating` and `Is Moving` were also on the deleted cast path, set
+   them from `Accelerating` and `Moving` the same way.
+3. Compile. No transition rule should need touching.
+
+### B. Jump becomes a dive only after falling far enough
+
+In the **AnimGraph**, open the jump state machine (the one containing
+`JumpStart`, `JumpLoop`, `LeapLoop`):
+
+1. Drag from the `JumpLoop` state to the `LeapLoop` state to create a transition.
+2. Open its rule and set **Can Enter Transition** to a Get of **`Is Long Fall`**.
+3. Give the transition a blend of about 0.3s so the change of pose is not a cut.
+4. Compile. `LeapLoop`'s existing exits to the landing states already handle
+   coming down.
+
+### C. Aim locomotion
+
+You author the blend space; the graph then gets one state.
+
+1. Create **`/Game/Animation/BS_AimStrafe`** — Blend Space, our skeleton
+   (`UE4_Mannequin_Skeleton` under OpenWorldAnimset). Horizontal axis
+   **Direction** −180..180, vertical axis **Speed** 0..500.
+2. Samples, all from `/Game/OpenWorldAnimset/Animations/Pistol/`:
+
+   | Direction | Speed | Clip |
+   |---|---|---|
+   | any | 0 | `Pistol_aim_Idle` |
+   | 0 | 500 | `Pistol_strafe_fwd` |
+   | 45 / −45 | 500 | `Pistol_strafe_fwd_right45` / `Pistol_strafe_fwd_left45` |
+   | 90 / −90 | 500 | `Pistol_strafe_right` / `Pistol_strafe_left` |
+   | 135 / −135 | 500 | `Pistol_strafe_bwd_right45` / `Pistol_strafe_bwd_left45` |
+   | 180 (and −180) | 500 | `Pistol_strafe_bwd` |
+
+   Put all nine loops in one sync group so the feet stay in phase across
+   directions.
+3. In the `Idle/Movement` state machine add a state **`Aim`** playing
+   `BS_AimStrafe`, with **Direction** ← Get `Move Direction` and **Speed** ←
+   Get `Ground Speed`.
+4. Transitions: `Idle/Movement`-side states → `Aim` on `Is Aiming`; `Aim` →
+   `Idle/Movement` on `NOT Is Aiming`. Blend ~0.2s both ways.
+5. Compile.
+
+`SetAiming` already pins the body to the camera and turns A/D into strafes, so
+`MoveDirection` reads exactly as the blend space expects: 0 running toward the
+crosshair, ±90 strafing, 180 backpedalling.
+
+### Then
+
+Run `./Scripts/run_tests.ps1`, and check each with `ShowDebug ANIMATION`:
+sprint sits on the `Run_IP` sample; a jump plays `Jump_Fall_IP` and only a
+drop from the aircraft switches to `Leap_Fall_IP`; aiming shows the `Aim` state
+with `BS_AimStrafe` driving.
 
 ---
 
