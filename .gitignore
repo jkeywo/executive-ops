@@ -89,6 +89,7 @@ Raw/*
 # Animation
 /Content/OpenWorldAnimset/
 /Content/FightingAnimsetPro/
+/Content/DynamicLocomotion/
 
 # Audio
 /Content/HumanVocalizations/

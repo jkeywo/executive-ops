@@ -63,6 +63,7 @@ $contentDir = Join-Path $root "Content"
 $packs = @(
     @{ Folder = "OpenWorldAnimset";      VaultDir = "OpenWorl0de4751fa43eV1";  Project = "DynamicLocomotion"; Purpose = "Locomotion, vault, climb animation" }
     @{ Folder = "FightingAnimsetPro";    VaultDir = "FightingAnimsetPro";      Project = "DynamicLocomotion"; Purpose = "Takedown and melee animation" }
+    @{ Folder = "DynamicLocomotion";     VaultDir = "DynamicL7332708e784bV1";  Project = "DynamicLocomotion"; Purpose = "Locomotion graph: starts, stops, landings, sync-marked walk/jog/run" }
     @{ Folder = "BigNiagaraBundle";      VaultDir = "BigNiagafb970ed92a8eV2";  Purpose = "Thruster jets, dust, sparks, holograms" }
     @{ Folder = "Chameleon";             VaultDir = "Chameleo527966e04eb8V15"; Purpose = "Post-process grade, alarm material, bullet hole texture" }
     @{ Folder = "ChameleonLayers";       VaultDir = "Chameleo527966e04eb8V15"; Purpose = "Chameleon layer stack" }

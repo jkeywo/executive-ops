@@ -256,7 +256,7 @@ bool AEOOperativeCharacter::TryTakedown()
 	Victim->Takedown(this);
 
 	TakedownRemaining = TakedownDuration;
-	if (TakedownAnim)
+	if (TakedownAnim && UsesDirectAnimationPlayback())
 	{
 		if (USkeletalMeshComponent* MeshComp = GetMesh())
 		{
@@ -358,7 +358,7 @@ bool AEOOperativeCharacter::FireWeapon()
 		}
 	}
 
-	if (FireAnim)
+	if (FireAnim && UsesDirectAnimationPlayback())
 	{
 		if (USkeletalMeshComponent* MeshComp = GetMesh())
 		{
@@ -386,7 +386,7 @@ void AEOOperativeCharacter::HandleDied(AActor* Killer)
 		Movement->DisableMovement();
 	}
 
-	if (DeathAnim)
+	if (DeathAnim && UsesDirectAnimationPlayback())
 	{
 		if (USkeletalMeshComponent* MeshComp = GetMesh())
 		{
@@ -673,8 +673,27 @@ void AEOOperativeCharacter::TickSlide(float DeltaSeconds)
 
 // ------------------------------------------------------------------ animation
 
+bool AEOOperativeCharacter::UsesDirectAnimationPlayback() const
+{
+	// An Animation Blueprint owns the pose when one is assigned, and
+	// PlayAnimation would silently switch the mesh back to single-node playback
+	// and throw the whole graph away. So every direct call is gated on the mesh
+	// actually being in single-node mode - which is the greybox fallback for a
+	// project whose animation assets have not been prepared yet.
+	const USkeletalMeshComponent* MeshComp = GetMesh();
+	return MeshComp && MeshComp->GetAnimationMode() == EAnimationMode::AnimationSingleNode;
+}
+
 void AEOOperativeCharacter::UpdateLocomotionAnimation()
 {
+	if (!UsesDirectAnimationPlayback())
+	{
+		// The graph reads velocity and falling state off the movement component
+		// itself: looping, blending, starts, stops and landings are its job, and
+		// it does them far better than a clip-per-state switch could.
+		return;
+	}
+
 	USkeletalMeshComponent* MeshComp = GetMesh();
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	if (!MeshComp || !Movement)

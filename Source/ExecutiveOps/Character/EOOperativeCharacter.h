@@ -11,6 +11,7 @@ class UCameraComponent;
 class UStaticMeshComponent;
 class UEOTraversalComponent;
 class UEOHealthComponent;
+class UEOWeaponComponent;
 class AEOGuardCharacter;
 class USpringArmComponent;
 class UEOInputConfig;
@@ -79,6 +80,13 @@ protected:
 
 	/** Chooses and plays the locomotion clip that matches what the body is doing. */
 	void UpdateLocomotionAnimation();
+
+	/**
+	 * True when this character drives clips itself, false when an Animation
+	 * Blueprint owns the pose. Every direct PlayAnimation call is gated on it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Animation")
+	bool UsesDirectAnimationPlayback() const;
 
 	void TickSlide(float DeltaSeconds);
 
@@ -354,6 +362,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Combat")
 	UEOHealthComponent* GetHealth() const { return Health; }
+
+	/** The pistol. Exposed so the harness can assert the shot without the dice. */
+	UFUNCTION(BlueprintPure, Category = "Combat")
+	UEOWeaponComponent* GetWeapon() const { return Weapon; }
 
 	/** The guard currently positioned for a silent kill, if any. */
 	UFUNCTION(BlueprintPure, Category = "Combat")

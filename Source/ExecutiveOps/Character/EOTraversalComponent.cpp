@@ -427,7 +427,12 @@ void UEOTraversalComponent::Begin(const FEOTraversalQuery& Query)
 	{
 		if (USkeletalMeshComponent* Mesh = Character->GetMesh())
 		{
-			Mesh->PlayAnimation(Anim, /*bLooping=*/false);
+			// Same gate as the character's own clips: an Animation Blueprint owns
+			// the pose when one is assigned, and PlayAnimation would tear it down.
+			if (Mesh->GetAnimationMode() == EAnimationMode::AnimationSingleNode)
+			{
+				Mesh->PlayAnimation(Anim, /*bLooping=*/false);
+			}
 		}
 	}
 
