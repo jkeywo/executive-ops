@@ -178,6 +178,12 @@ def build_context(name, rows, actions):
     #
     # Rebuilt from the table every run, so a row removed here is a binding
     # removed there - the point of the script being the source of truth.
+    #
+    # The array lives inside DefaultKeyMappings since 5.7. The context still
+    # exposes a top-level "mappings" property, but it is the deprecated one:
+    # the engine only migrates it for assets saved before the change, so a
+    # fresh asset written there loads with no bindings at all and the pawn
+    # never hears a key.
     mappings = []
     for action_name, key_name, modifiers in rows:
         mapping = unreal.EnhancedActionKeyMapping()
@@ -186,7 +192,9 @@ def build_context(name, rows, actions):
         mapping.set_editor_property(
             "modifiers", [make_modifier(kind, context) for kind in modifiers])
         mappings.append(mapping)
-    context.set_editor_property("mappings", mappings)
+    default_mappings = unreal.InputMappingContextMappingData()
+    default_mappings.set_editor_property("mappings", mappings)
+    context.set_editor_property("default_key_mappings", default_mappings)
 
     unreal.EditorAssetLibrary.save_asset("{}/{}".format(ROOT, name))
     log("{}: {} bindings".format(name, len(rows)))

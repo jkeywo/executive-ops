@@ -6,6 +6,7 @@
 #include "Combat/EOGuardCharacter.h"
 #include "EngineUtils.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputMappingContext.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EngineUtils.h"
 #include "ExecutiveOps.h"
@@ -335,17 +336,36 @@ void AEOPlayerController::ApplyMappingContext(EEOControlMode Mode)
 	// Exactly one context is ever active, so aircraft and ground bindings cannot collide.
 	Subsystem->ClearAllMappings();
 
+	const UInputMappingContext* Context = nullptr;
 	switch (Mode)
 	{
 	case EEOControlMode::Aircraft:
-		Subsystem->AddMappingContext(InputConfig->AircraftContext, 0);
+		Context = InputConfig->AircraftContext;
 		break;
 	case EEOControlMode::Operative:
-		Subsystem->AddMappingContext(InputConfig->OperativeContext, 0);
+		Context = InputConfig->OperativeContext;
 		break;
 	default:
-		break;
+		return;
 	}
+
+	if (!Context)
+	{
+		UE_LOG(LogExecutiveOps, Error, TEXT("Input config has no mapping context for control mode %d."),
+			static_cast<int32>(Mode));
+		return;
+	}
+
+	// A context with nothing in it is a silent failure: possession succeeds, the
+	// pawn binds its actions, and no key ever arrives. Shout, so the test suite
+	// catches it instead of the player.
+	if (Context->GetMappings().IsEmpty())
+	{
+		UE_LOG(LogExecutiveOps, Error, TEXT("Mapping context %s holds no key mappings; rebuild it with Scripts/build_input_assets.py."),
+			*Context->GetName());
+	}
+
+	Subsystem->AddMappingContext(Context, 0);
 }
 
 EEOControlMode AEOPlayerController::GetControlMode() const
