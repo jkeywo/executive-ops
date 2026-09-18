@@ -178,7 +178,8 @@ void AEOMissionLoopTest::Step()
 
 		if (Attempt >= 2)
 		{
-			Go(EPhase::Finished, 1.5f);
+			// Polled: the re-arm is on a timer of its own.
+			Go(EPhase::Rearm, 0.f);
 			return;
 		}
 
@@ -201,6 +202,31 @@ void AEOMissionLoopTest::Step()
 			IEODeployableInterface::Execute_SetStowed(Op, false);
 		}
 		Go(EPhase::Setup, 0.2f);
+		return;
+	}
+
+	case EPhase::Rearm:
+	{
+		// The game's own way back: a few seconds after Complete the controller
+		// re-arms the mission and puts the player in the aircraft. Waited for
+		// and asserted, because it is the last step of the loop - and because
+		// the tests in this map share one world, so a timer left ticking here
+		// would fire in the middle of the next one.
+		const bool bRearmed = Mission && Mission->GetMissionState() == EEOMissionState::Inactive;
+		if (!bRearmed && GetPhaseElapsed() < 8.f)
+		{
+			return;
+		}
+
+		Check(bRearmed, TEXT("the mission re-arms itself after completing"));
+		Check(Controller->GetControlMode() == EEOControlMode::Aircraft,
+			TEXT("the re-armed player is back in the aircraft"));
+		if (AEOObjectiveTerminal* Objective = GetObjective())
+		{
+			Check(!Objective->IsComplete(), TEXT("the re-armed objective is fresh"));
+		}
+
+		Go(EPhase::Finished, 0.f);
 		return;
 	}
 

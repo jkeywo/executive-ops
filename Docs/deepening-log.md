@@ -408,6 +408,21 @@ three things the self-test had been passing over:
 `AEOFunctionalTest::IsReady` also waits for the navmesh build to finish, since
 most sequences move something that paths.
 
+**Tests in one map share one world.** The runner only reloads a map when the
+next test is in a different one (`AutomationOpenMap`, no force). The traversal
+test failed on its first run because the mission loop had finished 1.5s after
+Complete and left the controller's 3s re-arm timer ticking, which fired in the
+middle of the next test and put the player back in the aircraft. The rule that
+follows: a sequence ends with the world quiet, and anything the game does on a
+timer after the sequence's last event is part of the sequence. The mission loop
+now waits for the re-arm and asserts it, which it should have anyway - being
+playable again is the point of M6.
+
+Converted so far, all in `L_MissionTest`: MissionLoop (48), GuardEncounter
+(35), Traversal (48). Remaining: the flight suite's clusters in `L_FlightTest`
+(boot, flight model, navigation, approach, deployment; 59 checks), then
+`UEOSelfTest` and its runner script go.
+
 **C7 - the guard's AI.** *(perception and navigation in; the StateTree is not)*
 
 Confirmed by the author before starting, having seen `Docs/adr/0005` and the fact

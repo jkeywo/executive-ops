@@ -12,7 +12,9 @@
  * objective, cross back to the pad, call the extraction, wait for the craft to
  * actually fly in, get handed the aircraft. Then EOReset, and the same again -
  * because the point of M6 is that it has to be playable again without debug
- * help, and a mission that only works once is not a loop.
+ * help, and a mission that only works once is not a loop. Finally the re-arm:
+ * the game's own way back to a fresh mission, waited for rather than left
+ * ticking, since the next test in this map inherits whatever this one leaves.
  *
  * Ported from UEOSelfTest's MissionSetup..MissionSecondRun phases, check for
  * check. Placed in L_MissionTest by Scripts/place_functional_tests.py; runs on
@@ -37,6 +39,7 @@ private:
 		Extract,
 		Pickup,
 		SecondRun,
+		Rearm,
 		Finished
 	};
 

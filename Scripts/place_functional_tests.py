@@ -27,6 +27,7 @@ import eo_editor  # noqa: E402
 TESTS = [
     ("/Game/Maps/L_MissionTest", "MissionLoop", "EOMissionLoopTest"),
     ("/Game/Maps/L_MissionTest", "GuardEncounter", "EOGuardEncounterTest"),
+    ("/Game/Maps/L_MissionTest", "Traversal", "EOTraversalTest"),
 ]
 
 # Out of the way of the arena: nothing here needs to be anywhere in particular,
