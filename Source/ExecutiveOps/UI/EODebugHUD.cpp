@@ -128,8 +128,14 @@ void AEODebugHUD::DrawHUD()
 			// A bar, because the hover transition is a blend and a boolean hides that.
 			const int32 Filled = FMath::RoundToInt(Craft->GetHoverBlend() * 10.f);
 			const FString Bar = FString::ChrN(Filled, TEXT('=')) + FString::ChrN(10 - Filled, TEXT('.'));
-			DrawTextLine(FString::Printf(TEXT("Hover:    [%s] %s"), *Bar, bHover ? TEXT("HELD") : TEXT("")), Y);
+			DrawTextLine(FString::Printf(TEXT("Hover:    [%s] %s"), *Bar, bHover ? TEXT("ON") : TEXT("")), Y);
 			DrawTextLine(FString::Printf(TEXT("Thrust:   %.0f%%"), Craft->GetThrustAlpha() * 100.f), Y);
+			if (!bHover)
+			{
+				static const TCHAR* Detents[] = { TEXT("stop"), TEXT("CREEP"), TEXT("SLOW"), TEXT("FAST") };
+				const int32 Step = FMath::Clamp(Craft->GetThrottleStep(), 0, 3);
+				DrawTextLine(FString::Printf(TEXT("Throttle: %s"), Detents[Step]), Y);
+			}
 		}
 		else
 		{

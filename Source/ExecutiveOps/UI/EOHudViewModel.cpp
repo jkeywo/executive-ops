@@ -350,7 +350,7 @@ FEOHudViewModel FEOHudViewModel::Build(const FEOHUDState& S)
 	{
 		VM.bShowCharge = true;
 		VM.HoverBlend = S.Aircraft->GetHoverBlend();
-		VM.ChargeHint = Str(TEXT("HOLD LEFT SHIFT"));
+		VM.ChargeHint = Str(TEXT("SPACE TOGGLES"));
 	}
 
 	// ---- 8 Commit

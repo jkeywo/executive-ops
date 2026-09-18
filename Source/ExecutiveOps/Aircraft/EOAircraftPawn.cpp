@@ -78,7 +78,8 @@ AEOAircraftPawn::AEOAircraftPawn()
 	CameraBoom->TargetArmLength = CameraDistanceHover;
 	CameraBoom->SocketOffset = FVector(0.f, 0.f, 320.f);
 	// The boom inherits the craft's yaw so the camera sits behind the nose. Control
-	// rotation is deliberately not used: the craft yaws with Q/E, not the mouse.
+	// rotation is deliberately not used: in hover the craft yaws with A/D and the
+	// mouse only looks around it.
 	CameraBoom->bUsePawnControlRotation = false;
 	CameraBoom->bInheritPitch = false;
 	CameraBoom->bInheritRoll = false;
@@ -157,11 +158,6 @@ void AEOAircraftPawn::SetFirstPerson(bool bNewFirstPerson)
 
 	bFirstPerson = bNewFirstPerson;
 	ApplyViewMode();
-}
-
-void AEOAircraftPawn::ToggleView()
-{
-	SetFirstPerson(!bFirstPerson);
 }
 
 bool AEOAircraftPawn::IsWidgetPanelLive() const
@@ -294,6 +290,9 @@ void AEOAircraftPawn::Tick(float DeltaSeconds)
 	UpdateFeedback(DeltaSeconds);
 
 	bLookActiveThisFrame = false;
+	// Consumed by UpdateFlight when it runs; dropped when a scripted arrival or
+	// the deployment hold ran instead, so it does not pile up and unload later.
+	PendingTurn = FVector2D::ZeroVector;
 }
 
 bool AEOAircraftPawn::UpdateScriptedArrival(float DeltaSeconds)
@@ -352,24 +351,15 @@ void AEOAircraftPawn::UpdateFlight(float DeltaSeconds)
 	const float MaxSpeed = FMath::Lerp(FlightMaxSpeed, HoverMaxSpeed, HoverBlend);
 	const float Accel = FMath::Lerp(FlightAcceleration, HoverAcceleration, HoverBlend);
 	const float Braking = FMath::Lerp(FlightBraking, HoverBraking, HoverBlend);
-	const float YawRate = FMath::Lerp(FlightYawRate, HoverYawRate, HoverBlend);
+	UpdateRotation(DeltaSeconds, HoverYawRate);
 
-	if (!FMath::IsNearlyZero(YawInput))
-	{
-		const float YawDelta = YawInput * YawRate * DeltaSeconds;
-		AddActorWorldRotation(FRotator(0.f, YawDelta, 0.f));
-
-		// Carry momentum around with the nose. Without this the craft keeps its old
-		// world heading through a turn and slides sideways like it is on ice.
-		Movement->Velocity = FRotator(0.f, YawDelta * VelocityTurnFactor, 0.f).RotateVector(Movement->Velocity);
-	}
-
-	// Build the desired direction in the craft's own frame. Vertical stays world-up
-	// so climbing is always straight up regardless of how the hull is banked.
+	// Build the desired direction in the craft's own frame, all three axes. In
+	// flight that is six degrees of freedom: nose down and "up" is along the
+	// canopy. Hover levels the hull, so there up is up.
 	FVector Desired = FVector::ZeroVector;
 	Desired += GetActorForwardVector() * MoveInput.X;
 	Desired += GetActorRightVector() * MoveInput.Y;
-	Desired += FVector::UpVector * MoveInput.Z;
+	Desired += GetActorUpVector() * MoveInput.Z;
 
 	if (Desired.IsNearlyZero() && bStationKeepEnabled)
 	{
@@ -403,6 +393,46 @@ void AEOAircraftPawn::UpdateFlight(float DeltaSeconds)
 	}
 
 	Movement->MoveByVelocity(DeltaSeconds);
+}
+
+void AEOAircraftPawn::UpdateRotation(float DeltaSeconds, float YawRate)
+{
+	const FQuat Before = GetActorQuat();
+
+	// Everything is applied in the craft's own frame: that is what makes a pull
+	// on the mouse while rolled ninety degrees a turn rather than a climb.
+	FRotator Local = FRotator::ZeroRotator;
+	Local.Yaw = PendingTurn.X;
+	Local.Pitch = PendingTurn.Y * FlightPitchScale;
+	Local.Roll = RollInput * FlightRollRate * DeltaSeconds;
+	Local.Yaw += YawInput * YawRate * DeltaSeconds;
+	if (!Local.IsNearlyZero())
+	{
+		AddActorLocalRotation(Local.Quaternion());
+	}
+	PendingTurn = FVector2D::ZeroVector;
+
+	// Hover sits flat: the chase camera, the deployment socket and the station
+	// keep all assume the hull is level, so engaging hover eases pitch and roll
+	// out while keeping the heading.
+	if (bHoverRequested)
+	{
+		const FQuat Now = GetActorQuat();
+		const FQuat Level = FRotator(0.f, Now.Rotator().Yaw, 0.f).Quaternion();
+		if (!Now.Equals(Level, 1e-4f))
+		{
+			SetActorRotation(FMath::QInterpTo(Now, Level, DeltaSeconds, HoverLevelSpeed));
+		}
+	}
+
+	// Carry momentum around with the nose. Without this the craft keeps its old
+	// world heading through a turn and slides sideways like it is on ice.
+	const FQuat Delta = GetActorQuat() * Before.Inverse();
+	if (!Delta.IsIdentity(1e-6f))
+	{
+		Movement->Velocity = FQuat::Slerp(FQuat::Identity, Delta, VelocityTurnFactor)
+			.RotateVector(Movement->Velocity);
+	}
 }
 
 FVector AEOAircraftPawn::GetVelocity() const
@@ -451,11 +481,13 @@ void AEOAircraftPawn::UpdateAttitude(float DeltaSeconds)
 		return;
 	}
 
-	// Bank into strafe and into the turn; pitch the nose down under forward thrust.
-	// Both ease off in hover, where the craft should sit flat and stable.
-	const float Stability = 1.f - HoverBlend * 0.75f;
-	const float TargetRoll = FMath::Clamp(MoveInput.Y + YawInput, -1.f, 1.f) * MaxBankAngle * Stability;
-	const float TargetPitch = -MoveInput.X * MaxPitchAngle * Stability;
+	// A slight lean into a strafe or a turn, and a nose-down under thrust, so a
+	// hovering craft reads as working. Hover only: in flight the airframe
+	// itself rolls and pitches under the mouse, and a lean on top of a real
+	// attitude reads as slop.
+	const float Lean = HoverBlend * 0.25f;
+	const float TargetRoll = FMath::Clamp(MoveInput.Y + YawInput, -1.f, 1.f) * MaxBankAngle * Lean;
+	const float TargetPitch = -MoveInput.X * MaxPitchAngle * Lean;
 
 	const FRotator Current = HullPivot->GetRelativeRotation();
 	const FRotator Target(TargetPitch, 0.f, TargetRoll);
@@ -637,32 +669,94 @@ void AEOAircraftPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 
 	Input->BindAction(Config->FlightMoveAction, ETriggerEvent::Triggered, this, &AEOAircraftPawn::Input_Move);
 	Input->BindAction(Config->FlightVerticalAction, ETriggerEvent::Triggered, this, &AEOAircraftPawn::Input_Vertical);
-	Input->BindAction(Config->FlightYawAction, ETriggerEvent::Triggered, this, &AEOAircraftPawn::Input_Yaw);
+	Input->BindAction(Config->FlightRollAction, ETriggerEvent::Triggered, this, &AEOAircraftPawn::Input_Roll);
 	// Completed zeroes the held demand; without it the throttle would stick on release.
 	Input->BindAction(Config->FlightMoveAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_MoveReleased);
 	Input->BindAction(Config->FlightVerticalAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_VerticalReleased);
-	Input->BindAction(Config->FlightYawAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_YawReleased);
+	Input->BindAction(Config->FlightRollAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_RollReleased);
+	// Started, not Triggered: a tap steps the throttle once, however long it is held.
+	Input->BindAction(Config->ThrottleUpAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_ThrottleUp);
+	Input->BindAction(Config->ThrottleDownAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_ThrottleDown);
 
 	Input->BindAction(Config->LookAction, ETriggerEvent::Triggered, this, &AEOAircraftPawn::Input_Look);
 	Input->BindAction(Config->LookStickAction, ETriggerEvent::Triggered, this, &AEOAircraftPawn::Input_LookStick);
-	Input->BindAction(Config->HoverAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_HoverStart);
-	Input->BindAction(Config->HoverAction, ETriggerEvent::Completed, this, &AEOAircraftPawn::Input_HoverStop);
+	Input->BindAction(Config->HoverAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_HoverToggle);
 	Input->BindAction(Config->DeployAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_Deploy);
 	Input->BindAction(Config->ToggleMapAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_ToggleMap);
-	Input->BindAction(Config->ToggleViewAction, ETriggerEvent::Started, this, &AEOAircraftPawn::Input_ToggleView);
+}
+
+void AEOAircraftPawn::ApplyKeyDemand()
+{
+	// W/S are held thrust in hover and a tapped throttle in flight. A/D strafe
+	// in flight and turn in hover; Q/E roll in flight and strafe in hover. The
+	// slot a key does not own in this mode is zeroed, or a strafe held through
+	// the toggle would carry on as a turn.
+	bKeyDriven = true;
+	if (bHoverRequested)
+	{
+		MoveInput.X = HeldMove.Y;
+		MoveInput.Y = HeldRoll;
+		YawInput = HeldMove.X;
+		RollInput = 0.f;
+	}
+	else
+	{
+		MoveInput.X = ThrottleFraction();
+		MoveInput.Y = HeldMove.X;
+		YawInput = 0.f;
+		RollInput = HeldRoll;
+	}
+}
+
+float AEOAircraftPawn::ThrottleFraction() const
+{
+	// Expressed against the fast speed because that is what UpdateFlight scales
+	// the demand by; the slow detent is a fraction of it.
+	if (FlightMaxSpeed <= KINDA_SMALL_NUMBER)
+	{
+		return 0.f;
+	}
+	switch (ThrottleStep)
+	{
+	case 3:  return 1.f;
+	case 2:  return FlightSlowSpeed / FlightMaxSpeed;
+	case 1:  return FlightCreepSpeed / FlightMaxSpeed;
+	default: return 0.f;
+	}
+}
+
+void AEOAircraftPawn::Input_ThrottleUp(const FInputActionValue& Value)
+{
+	// In hover the same key is held thrust, handled by Input_Move.
+	if (bHoverRequested)
+	{
+		return;
+	}
+	ThrottleStep = FMath::Min(ThrottleStep + 1, MaxThrottleStep);
+	ApplyKeyDemand();
+}
+
+void AEOAircraftPawn::Input_ThrottleDown(const FInputActionValue& Value)
+{
+	if (bHoverRequested)
+	{
+		return;
+	}
+	// Stops at zero: there is no reverse in flight. Turn round.
+	ThrottleStep = FMath::Max(ThrottleStep - 1, 0);
+	ApplyKeyDemand();
 }
 
 void AEOAircraftPawn::Input_Move(const FInputActionValue& Value)
 {
-	const FVector2D Axis = Value.Get<FVector2D>();
-	MoveInput.X = Axis.Y;
-	MoveInput.Y = Axis.X;
+	HeldMove = Value.Get<FVector2D>();
+	ApplyKeyDemand();
 }
 
 void AEOAircraftPawn::Input_MoveReleased(const FInputActionValue& Value)
 {
-	MoveInput.X = 0.f;
-	MoveInput.Y = 0.f;
+	HeldMove = FVector2D::ZeroVector;
+	ApplyKeyDemand();
 }
 
 void AEOAircraftPawn::Input_Vertical(const FInputActionValue& Value)
@@ -675,14 +769,16 @@ void AEOAircraftPawn::Input_VerticalReleased(const FInputActionValue& Value)
 	MoveInput.Z = 0.f;
 }
 
-void AEOAircraftPawn::Input_Yaw(const FInputActionValue& Value)
+void AEOAircraftPawn::Input_Roll(const FInputActionValue& Value)
 {
-	YawInput = Value.Get<float>();
+	HeldRoll = Value.Get<float>();
+	ApplyKeyDemand();
 }
 
-void AEOAircraftPawn::Input_YawReleased(const FInputActionValue& Value)
+void AEOAircraftPawn::Input_RollReleased(const FInputActionValue& Value)
 {
-	YawInput = 0.f;
+	HeldRoll = 0.f;
+	ApplyKeyDemand();
 }
 
 void AEOAircraftPawn::Input_Look(const FInputActionValue& Value)
@@ -695,7 +791,18 @@ void AEOAircraftPawn::Input_Look(const FInputActionValue& Value)
 
 	// Inversion is applied here rather than baked into the mapping, so that
 	// changing the setting takes effect without rebuilding the context.
-	ApplyLookDelta(FVector2D(Axis.X, Axis.Y * UEOInputSettings::MouseSign()) * LookSensitivity);
+	const FVector2D Signed(Axis.X, Axis.Y * UEOInputSettings::MouseSign());
+
+	// The same mouse turns the craft in flight and the head in hover. A mouse
+	// reports a delta, already frame-independent, so it is degrees directly.
+	if (bHoverRequested)
+	{
+		ApplyLookDelta(Signed * LookSensitivity);
+	}
+	else
+	{
+		AddTurnDelta(Signed * FlightTurnSensitivity);
+	}
 }
 
 void AEOAircraftPawn::Input_LookStick(const FInputActionValue& Value)
@@ -708,8 +815,21 @@ void AEOAircraftPawn::Input_LookStick(const FInputActionValue& Value)
 
 	// A stick reports a held position, so it is a rate: scale by delta time or
 	// the camera whips round faster the better the frame rate.
-	ApplyLookDelta(FVector2D(Axis.X, Axis.Y * UEOInputSettings::StickSign())
-		* StickLookRate * GetWorld()->GetDeltaSeconds());
+	const FVector2D Signed(Axis.X, Axis.Y * UEOInputSettings::StickSign());
+	const float DeltaSeconds = GetWorld()->GetDeltaSeconds();
+	if (bHoverRequested)
+	{
+		ApplyLookDelta(Signed * StickLookRate * DeltaSeconds);
+	}
+	else
+	{
+		AddTurnDelta(Signed * FlightStickTurnRate * DeltaSeconds);
+	}
+}
+
+void AEOAircraftPawn::AddTurnDelta(const FVector2D& Delta)
+{
+	PendingTurn += Delta;
 }
 
 void AEOAircraftPawn::ApplyLookDelta(const FVector2D& Delta)
@@ -728,19 +848,9 @@ void AEOAircraftPawn::ApplyLookDelta(const FVector2D& Delta)
 	bLookActiveThisFrame = true;
 }
 
-void AEOAircraftPawn::Input_HoverStart(const FInputActionValue& Value)
+void AEOAircraftPawn::Input_HoverToggle(const FInputActionValue& Value)
 {
-	Execute_SetHoverEnabled(this, true);
-}
-
-void AEOAircraftPawn::Input_HoverStop(const FInputActionValue& Value)
-{
-	Execute_SetHoverEnabled(this, false);
-}
-
-void AEOAircraftPawn::Input_ToggleView(const FInputActionValue& Value)
-{
-	ToggleView();
+	Execute_SetHoverEnabled(this, !bHoverRequested);
 }
 
 void AEOAircraftPawn::Input_ToggleMap(const FInputActionValue& Value)
@@ -787,7 +897,8 @@ void AEOAircraftPawn::UnPossessed()
 	Super::UnPossessed();
 
 	// Removing the mapping context can tear an in-progress action down without a
-	// Completed event, which would otherwise leave hover latched on forever.
+	// Completed event, which would otherwise leave a key held forever. The mode
+	// is not a key: a craft left in hover stays in hover.
 	ClearControlDemand();
 
 	ApplyViewMode();
@@ -797,22 +908,49 @@ void AEOAircraftPawn::ClearControlDemand()
 {
 	MoveInput = FVector::ZeroVector;
 	YawInput = 0.f;
-	bHoverRequested = false;
+	RollInput = 0.f;
+	HeldMove = FVector2D::ZeroVector;
+	HeldRoll = 0.f;
+	ThrottleStep = 0;
+	PendingTurn = FVector2D::ZeroVector;
+	bKeyDriven = false;
 }
 
 void AEOAircraftPawn::SetFlightInput_Implementation(const FVector& InMoveInput)
 {
 	MoveInput = InMoveInput;
+	bKeyDriven = false;
 }
 
 void AEOAircraftPawn::SetYawInput_Implementation(float InYawInput)
 {
 	YawInput = InYawInput;
+	bKeyDriven = false;
 }
 
 void AEOAircraftPawn::SetHoverEnabled_Implementation(bool bEnabled)
 {
+	if (bHoverRequested == bEnabled)
+	{
+		return;
+	}
 	bHoverRequested = bEnabled;
+
+	// The view is part of the mode: flight is flown from the cockpit, hover from
+	// outside, where the drop can be lined up.
+	SetFirstPerson(!bEnabled);
+
+	// Hover is the stopped detent: the throttle is wound back so the craft
+	// parks, and coming back to flight starts from a standstill.
+	ThrottleStep = 0;
+
+	// Keys held through the toggle are reinterpreted for the new mode. Only
+	// when the keys own the demand: one set from code - the tests and the
+	// approach - survives a mode change the same code asked for.
+	if (bKeyDriven)
+	{
+		ApplyKeyDemand();
+	}
 }
 
 bool AEOAircraftPawn::IsHovering_Implementation() const
@@ -883,10 +1021,9 @@ bool AEOAircraftPawn::HasReachedScriptedDestination_Implementation() const
 
 void AEOAircraftPawn::ResetFlightState_Implementation()
 {
-	MoveInput = FVector::ZeroVector;
-	YawInput = 0.f;
+	ClearControlDemand();
 	Movement->Velocity = FVector::ZeroVector;
-	bHoverRequested = false;
+	Execute_SetHoverEnabled(this, false);
 	HoverBlend = 0.f;
 	ThrustAlpha = 0.f;
 	bStationKeepEnabled = false;
@@ -898,4 +1035,7 @@ void AEOAircraftPawn::ResetFlightState_Implementation()
 	{
 		HullPivot->SetRelativeRotation(FRotator::ZeroRotator);
 	}
+
+	// Flight may have left the hull at any attitude; a reset is level.
+	SetActorRotation(FRotator(0.f, GetActorRotation().Yaw, 0.f));
 }

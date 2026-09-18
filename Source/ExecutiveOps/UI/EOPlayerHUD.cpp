@@ -811,7 +811,7 @@ void AEOPlayerHUD::DrawChargeSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 	const float Blend = S.Aircraft->GetHoverBlend();
 
 	DrawCaption(TEXT("HOVER"), L.ChargeX, L.ChargeY, L.Scale, Blend > 0.f ? Accent : Dim);
-	DrawRightText(TEXT("HOLD LEFT SHIFT"), L.ChargeX + L.ChargeWidth, L.ChargeY,
+	DrawRightText(TEXT("SPACE TOGGLES"), L.ChargeX + L.ChargeWidth, L.ChargeY,
 		SmallFont(), L.Scale, Dim);
 
 	DrawSegmentBar(L.ChargeX, L.ChargeY + L.S(22.f), L.ChargeWidth, L.S(10.f), 10, Blend, Accent);

@@ -47,25 +47,35 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Input|Shared")
 	TObjectPtr<UInputAction> LookStickAction;
 
-	// Aircraft (M1 owns the handling; M0 only needs the bindings to exist)
+	// Aircraft. The keys keep their names across both modes and the pawn
+	// decides what they mean: A/D strafe in flight and turn in hover, Q/E roll
+	// in flight and strafe in hover.
+	/** W/S and A/D, as held axes. W/S only count in hover; in flight they are the throttle taps below. */
 	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
 	TObjectPtr<UInputAction> FlightMoveAction;
 
+	/** W tapped: one throttle step up. Shares the key with FlightMoveAction. */
+	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
+	TObjectPtr<UInputAction> ThrottleUpAction;
+
+	/** S tapped: one throttle step down. */
+	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
+	TObjectPtr<UInputAction> ThrottleDownAction;
+
+	/** Shift/Ctrl. */
 	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
 	TObjectPtr<UInputAction> FlightVerticalAction;
 
+	/** Q/E. */
 	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
-	TObjectPtr<UInputAction> FlightYawAction;
+	TObjectPtr<UInputAction> FlightRollAction;
 
+	/** Toggles between flight and hover; the view follows. */
 	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
 	TObjectPtr<UInputAction> HoverAction;
 
 	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
 	TObjectPtr<UInputAction> DeployAction;
-
-	/** Cockpit or chase camera. */
-	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
-	TObjectPtr<UInputAction> ToggleViewAction;
 
 	UPROPERTY(EditAnywhere, Category = "Input|Aircraft")
 	TObjectPtr<UInputAction> ToggleMapAction;

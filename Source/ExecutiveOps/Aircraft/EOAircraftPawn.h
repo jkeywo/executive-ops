@@ -18,10 +18,14 @@ struct FInputActionValue;
 /**
  * Greybox VTOL.
  *
- * Two handling modes sharing one velocity: HOVER is slow, heavily damped and
- * station-keeping, for working over a mission site; FLIGHT is fast and carries
- * momentum, for crossing the city. The blend between them is continuous rather
- * than a hard switch, because the transition is the part that has to feel good.
+ * Two handling modes sharing one velocity, toggled with one key. FLIGHT is six
+ * degrees of freedom: the mouse turns the nose, Q/E roll, W/S tap the throttle
+ * up and down through stop, creep, slow and fast, and the craft carries momentum
+ * across the city, flown from the cockpit. HOVER levels the hull and keeps
+ * station: W/S are held thrust, the mouse looks around a chase camera, A/D
+ * turn, Q/E strafe, and it is the only mode the operative can deploy from. The handling blend
+ * between them is continuous rather than a hard switch, because the transition
+ * is the part that has to feel good. The view follows the mode.
  *
  * Movement is swept against world geometry each frame. There is no physics
  * simulation: velocity is integrated directly, which keeps handling entirely
@@ -65,7 +69,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Aircraft")
 	float GetThrustAlpha() const { return ThrustAlpha; }
 
-	/** True when flying from the cockpit rather than the chase camera. */
+	/** The flight throttle detent: 0 stopped, 1 creep, 2 slow, 3 fast. Always 0 in hover. */
+	UFUNCTION(BlueprintPure, Category = "Aircraft")
+	int32 GetThrottleStep() const { return ThrottleStep; }
+
+	/** The most the craft will do in hover, for anything asserting on it. */
+	UFUNCTION(BlueprintPure, Category = "Aircraft")
+	float GetHoverMaxSpeed() const { return HoverMaxSpeed; }
+
+	/**
+	 * True when flying from the cockpit rather than the chase camera. Follows
+	 * the mode - flight is first person, hover is third - and only the flight
+	 * suite sets it directly, to exercise the view swap on its own.
+	 */
 	UFUNCTION(BlueprintPure, Category = "Camera")
 	bool IsFirstPerson() const { return bFirstPerson; }
 
@@ -84,9 +100,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void SetFirstPerson(bool bNewFirstPerson);
 
-	UFUNCTION(BlueprintCallable, Category = "Camera")
-	void ToggleView();
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
@@ -97,15 +110,32 @@ protected:
 	void Input_MoveReleased(const FInputActionValue& Value);
 	void Input_Vertical(const FInputActionValue& Value);
 	void Input_VerticalReleased(const FInputActionValue& Value);
-	void Input_Yaw(const FInputActionValue& Value);
-	void Input_YawReleased(const FInputActionValue& Value);
+	void Input_Roll(const FInputActionValue& Value);
+	void Input_RollReleased(const FInputActionValue& Value);
+	void Input_ThrottleUp(const FInputActionValue& Value);
+	void Input_ThrottleDown(const FInputActionValue& Value);
 	void Input_Look(const FInputActionValue& Value);
 	void Input_LookStick(const FInputActionValue& Value);
-	void Input_HoverStart(const FInputActionValue& Value);
-	void Input_HoverStop(const FInputActionValue& Value);
+	void Input_HoverToggle(const FInputActionValue& Value);
 	void Input_Deploy(const FInputActionValue& Value);
 	void Input_ToggleMap(const FInputActionValue& Value);
-	void Input_ToggleView(const FInputActionValue& Value);
+
+	/**
+	 * Turns the held keys into a control demand for the current mode.
+	 *
+	 * A/D and Q/E mean different things in each mode - strafe and roll in
+	 * flight, turn and strafe in hover - and W/S are a tapped throttle in
+	 * flight but held thrust in hover, so the keys are remembered as keys and
+	 * interpreted here, on every key event and on a mode change. That is what
+	 * stops a strafe held through the toggle turning into a stuck turn.
+	 */
+	void ApplyKeyDemand();
+
+	/** Forward demand, 0..1, for the current throttle detent. */
+	float ThrottleFraction() const;
+
+	/** Mouse or stick turning in flight: a rotation to apply this frame. */
+	void AddTurnDelta(const FVector2D& Delta);
 
 	/** Activates the right camera and hides whatever the other view should not see. */
 	void ApplyViewMode();
@@ -139,6 +169,13 @@ protected:
 
 	/** Shared by mouse and stick look, which differ only in how they are scaled. */
 	void ApplyLookDelta(const FVector2D& Delta);
+
+	/**
+	 * This frame's rotation: mouse turn and roll in flight, A/D yaw in hover,
+	 * levelling the hull whenever hover is engaged. Momentum follows the nose
+	 * by VelocityTurnFactor.
+	 */
+	void UpdateRotation(float DeltaSeconds, float YawRate);
 
 	/** Zero the held control demand. Called whenever possession changes. */
 	void ClearControlDemand();
@@ -210,21 +247,47 @@ protected:
 
 	// ---- Handling: flight mode -------------------------------------------------
 
+	/** Speed at the fast detent. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
-	float FlightMaxSpeed = 7000.f;
+	float FlightMaxSpeed = 14000.f;
+
+	/** Speed at the creep detent, the first tap of W from a standstill: for threading between towers. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
+	float FlightCreepSpeed = 3000.f;
+
+	/** Speed at the slow detent, the second tap. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
+	float FlightSlowSpeed = 7000.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
 	float FlightAcceleration = 5000.f;
 
-	/** Deceleration when the player releases input. Low, so flight carries momentum. */
+	/**
+	 * Deceleration towards a lower detent. Carries some momentum, but a tap of
+	 * S has to be felt: at the fast speeds the old value took most of ten
+	 * seconds to bring the craft back to slow.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
-	float FlightBraking = 1800.f;
+	float FlightBraking = 4500.f;
 
+	/** Degrees of yaw per unit of mouse movement in flight. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
-	float FlightYawRate = 65.f;
+	float FlightTurnSensitivity = 0.35f;
+
+	/** Pitch relative to yaw, mouse and stick alike. Above 1 makes the nose quicker up and down than round. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
+	float FlightPitchScale = 1.5f;
+
+	/** Degrees per second of pitch or yaw at full stick deflection in flight. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
+	float FlightStickTurnRate = 90.f;
+
+	/** Q/E roll, degrees per second. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Flight", meta = (ClampMin = "0"))
+	float FlightRollRate = 120.f;
 
 	/**
-	 * How much of the craft's momentum follows the nose when it yaws.
+	 * How much of the craft's momentum follows the nose when it turns.
 	 * 1 = no sideslip at all, 0 = momentum is purely world-space and the craft
 	 * drifts sideways through a turn.
 	 */
@@ -242,17 +305,22 @@ protected:
 	// ---- Handling: hover mode --------------------------------------------------
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0"))
-	float HoverMaxSpeed = 900.f;
+	float HoverMaxSpeed = 7000.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0"))
-	float HoverAcceleration = 4000.f;
+	float HoverAcceleration = 5000.f;
 
 	/** High, so releasing input parks the craft rather than drifting it. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0"))
 	float HoverBraking = 5000.f;
 
+	/** A/D turn rate in hover, degrees per second. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0"))
 	float HoverYawRate = 90.f;
+
+	/** How quickly engaging hover rolls and pitches the hull back to level. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0.01"))
+	float HoverLevelSpeed = 3.f;
 
 	/** How hard station-keeping pulls the craft onto the deployment point. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Hover", meta = (ClampMin = "0"))
@@ -268,6 +336,10 @@ protected:
 
 	// ---- Attitude --------------------------------------------------------------
 
+	/**
+	 * Cosmetic lean of the hull under input. Hover only: in flight the craft
+	 * really rolls and pitches, and a lean on top of that reads as slop.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Aircraft|Attitude")
 	float MaxBankAngle = 28.f;
 
@@ -297,8 +369,8 @@ protected:
 	// ---- Cockpit ----------------------------------------------------------------
 
 	/**
-	 * Piloting view. First person by default: the cockpit is the point of the
-	 * aircraft, and the chase camera is the concession, not the other way round.
+	 * Piloting view. Driven by the mode: flight is flown from the cockpit, hover
+	 * from the chase camera. True by default because the craft starts in flight.
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Cockpit")
 	bool bFirstPerson = true;
@@ -362,7 +434,30 @@ private:
 	 */
 	FVector MoveInput = FVector::ZeroVector;
 	float YawInput = 0.f;
+	float RollInput = 0.f;
 
+	/**
+	 * The keys as pressed, before the mode decides what they mean. WASD as
+	 * (right, forward); Q/E as one axis. See ApplyKeyDemand.
+	 */
+	FVector2D HeldMove = FVector2D::ZeroVector;
+	float HeldRoll = 0.f;
+
+	/** Flight throttle detent, stepped by tapping W and S. 0 stop, 1 creep, 2 slow, 3 fast. */
+	int32 ThrottleStep = 0;
+	static constexpr int32 MaxThrottleStep = 3;
+
+	/**
+	 * True while the demand came from the keys, false once code set it through
+	 * the interface. A mode change reinterprets the keys only in the first case,
+	 * so the tests and the scripted approach keep the demand they asked for.
+	 */
+	bool bKeyDriven = false;
+
+	/** Degrees of (yaw, pitch) the mouse or stick asked for since the last tick. */
+	FVector2D PendingTurn = FVector2D::ZeroVector;
+
+	/** The mode. Toggled, not held: Space flips it and it stays flipped. */
 	bool bHoverRequested = false;
 
 	/** Smoothed 0..1 towards bHoverRequested. */

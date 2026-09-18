@@ -66,8 +66,11 @@ than placeholders.
 > or a placeholder aircraft.
 
 1. PIE into `L_FlightTest`. The debug HUD shows `Control: Aircraft`, `Mission: Inactive`.
-2. `WASD` / `Space` / `Ctrl` / `Q` / `E` move the aircraft; the speed readout responds.
-3. Hold `Left Shift` and slow down — `Deploy:` turns green and reads `READY [F]`.
+2. Tap `W` for creep, slow then fast, `S` to step back down; `Shift`/`Ctrl` climb and descend,
+   the mouse turns the craft, `Q`/`E` roll and `A`/`D` strafe; the speed readout responds.
+3. Press `Space` for hover — the throttle drops to stop, the view swaps to the chase camera,
+   `W`/`S` are held thrust, the mouse looks around, `A`/`D` turn and `Q`/`E` strafe. Let go and
+   `Deploy:` turns green and reads `READY [F]`.
 4. Press `F`. Control switches to the operative; `Mission:` reads `On Ground`.
 5. `WASD` / mouse / `Space` / `Left Shift` drive the operative.
 6. Console `EOExtract` returns control to the aircraft.

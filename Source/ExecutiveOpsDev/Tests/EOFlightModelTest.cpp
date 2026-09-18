@@ -145,7 +145,9 @@ void AEOFlightModelTest::Step()
 				TEXT("hover blend is zero while flying"));
 			Check(Plane->GetThrustAlpha() > 0.5f, TEXT("thrust reads high under input"));
 
+			// Hover is where the craft parks: engage it and let go of the throttle.
 			IEOAircraftControlInterface::Execute_SetHoverEnabled(Plane, true);
+			IEOAircraftControlInterface::Execute_SetFlightInput(Plane, FVector::ZeroVector);
 		}
 		Go(EPhase::HoverSpeedClamp, 1.5f);
 		return;
@@ -160,11 +162,11 @@ void AEOFlightModelTest::Step()
 
 			const float Hovering = IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane);
 			Check(Hovering < SpeedSample,
-				FString::Printf(TEXT("engaging hover sheds speed (%.0f -> %.0f cm/s)"),
+				FString::Printf(TEXT("hover sheds speed once the throttle is released (%.0f -> %.0f cm/s)"),
 					SpeedSample, Hovering));
 
 			// Entering hover at speed must not leave the craft above the hover cap.
-			Check(Hovering <= 1000.f,
+			Check(Hovering <= Plane->GetHoverMaxSpeed(),
 				FString::Printf(TEXT("hover clamps speed to the hover maximum (%.0f cm/s)"), Hovering));
 
 			IEOAircraftControlInterface::Execute_ResetFlightState(Plane);

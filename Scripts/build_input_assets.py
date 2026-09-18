@@ -34,11 +34,12 @@ ACTIONS = {
     "IA_LookStick":      (AXIS2D,  "look_stick_action"),
     "IA_FlightMove":     (AXIS2D,  "flight_move_action"),
     "IA_FlightVertical": (AXIS1D,  "flight_vertical_action"),
-    "IA_FlightYaw":      (AXIS1D,  "flight_yaw_action"),
+    "IA_FlightRoll":     (AXIS1D,  "flight_roll_action"),
+    "IA_ThrottleUp":     (BOOLEAN, "throttle_up_action"),
+    "IA_ThrottleDown":   (BOOLEAN, "throttle_down_action"),
     "IA_Hover":          (BOOLEAN, "hover_action"),
     "IA_Deploy":         (BOOLEAN, "deploy_action"),
     "IA_ToggleMap":      (BOOLEAN, "toggle_map_action"),
-    "IA_ToggleView":     (BOOLEAN, "toggle_view_action"),
     "IA_Move":           (AXIS2D,  "move_action"),
     "IA_Jump":           (BOOLEAN, "jump_action"),
     "IA_Sprint":         (BOOLEAN, "sprint_action"),
@@ -58,30 +59,37 @@ SWZ = "swizzle"
 # Look inversion is deliberately absent: it is applied where the value is
 # consumed, from UEOInputSettings, so changing it does not need a rebuild.
 AIRCRAFT = [
-    # WASD translates, Space/Ctrl climbs and descends, Q/E yaws, Shift holds hover.
+    # Two modes, one key set; the pawn reads the keys by mode. Shared:
+    # Shift/Ctrl up and down, Space toggles the mode, mouse looks or turns.
+    # Flight: W/S tap the throttle through stop, creep, slow and fast, mouse turns the
+    # craft, Q/E roll, A/D strafe. Hover: W/S held thrust, mouse looks around
+    # the chase camera, A/D turn, Q/E strafe. W and S sit on two actions for
+    # that reason; the pawn listens to whichever the mode owns.
     ("IA_FlightMove",     "W",                         [SWZ]),
     ("IA_FlightMove",     "S",                         [SWZ, NEG]),
     ("IA_FlightMove",     "A",                         [NEG]),
     ("IA_FlightMove",     "D",                         []),
-    ("IA_FlightVertical", "SpaceBar",                  []),
+    ("IA_ThrottleUp",     "W",                         []),
+    ("IA_ThrottleDown",   "S",                         []),
+    ("IA_FlightVertical", "LeftShift",                 []),
     ("IA_FlightVertical", "LeftControl",               [NEG]),
-    ("IA_FlightYaw",      "E",                         []),
-    ("IA_FlightYaw",      "Q",                         [NEG]),
-    ("IA_Hover",          "LeftShift",                 []),
+    ("IA_FlightRoll",     "E",                         []),
+    ("IA_FlightRoll",     "Q",                         [NEG]),
+    ("IA_Hover",          "SpaceBar",                  []),
     ("IA_Deploy",         "F",                         []),
     ("IA_ToggleMap",      "M",                         []),
-    ("IA_ToggleView",     "V",                         []),
     ("IA_Look",           "Mouse2D",                   []),
     # Gamepad mirrors the keyboard rather than inventing a second scheme.
     ("IA_FlightMove",     "Gamepad_Left2D",            []),
+    ("IA_ThrottleUp",     "Gamepad_DPad_Up",           []),
+    ("IA_ThrottleDown",   "Gamepad_DPad_Down",         []),
     ("IA_FlightVertical", "Gamepad_RightTriggerAxis",  []),
     ("IA_FlightVertical", "Gamepad_LeftTriggerAxis",   [NEG]),
-    ("IA_FlightYaw",      "Gamepad_RightShoulder",     []),
-    ("IA_FlightYaw",      "Gamepad_LeftShoulder",      [NEG]),
+    ("IA_FlightRoll",     "Gamepad_RightShoulder",     []),
+    ("IA_FlightRoll",     "Gamepad_LeftShoulder",      [NEG]),
     ("IA_Hover",          "Gamepad_FaceButton_Left",   []),
     ("IA_Deploy",         "Gamepad_FaceButton_Bottom", []),
     ("IA_ToggleMap",      "Gamepad_FaceButton_Top",    []),
-    ("IA_ToggleView",     "Gamepad_RightThumbstick",   []),
     ("IA_LookStick",      "Gamepad_Right2D",           []),
 ]
 

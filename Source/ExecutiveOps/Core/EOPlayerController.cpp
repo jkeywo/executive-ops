@@ -477,7 +477,7 @@ FString AEOPlayerController::GetDeploymentBlocker() const
 
 	if (!IEOAircraftControlInterface::Execute_IsHovering(Aircraft))
 	{
-		return TEXT("hold hover to steady the craft");
+		return TEXT("switch to hover to deploy");
 	}
 
 	if (!IEOAircraftControlInterface::Execute_IsReadyForDeployment(Aircraft))
