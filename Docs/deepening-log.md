@@ -500,9 +500,15 @@ otherwise re-acquires from a stimulus registered before the reset.
 Worth keeping in mind for anything else that resets an actor driven by a tree:
 putting the pawn back is only half of it.
 
-## Suggested order for the rest
+## What is left
 
-C3's widgets, then C4's conversion. C3 is the one remaining asset-authoring job
-and the gather seam it binds to is already in place. C4's conversion is
-mechanical and the two test files show the pattern, but the suites already pass,
-so it is the lower-value of the two.
+C3's layout, and nothing else. `WBP_HUD` exists as a placeholder and is
+assigned as the viewport widget; the slots it needs are in `Docs/HUD-Widgets.md`
+and the geometry in `Docs/HUD-Layout-Guide.md`. Once it is laid out and also
+assigned as the panel widget, the Canvas slots, `EOHudScreenComponent` and
+`AEODebugHUD::DrawInto` come out - they only exist to feed the old panel - and
+`./Scripts/run_tests.ps1` says whether anything noticed.
+
+One thing the placeholder already taught: a HUD widget must never be
+hit-testable, or it takes the click that gives the viewport mouse capture and
+the game ignores every key. `UEOHudWidget` now enforces that on itself.
