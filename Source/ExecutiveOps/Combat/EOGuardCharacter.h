@@ -69,6 +69,42 @@ public:
 	float GetSightRange() const { return SightRange; }
 	float GetSightHalfAngle() const { return SightHalfAngle; }
 
+	// ---- Verbs the StateTree drives -------------------------------------------
+	// Tasks decide when; the guard decides how. These are the same behaviours the
+	// C++ state machine runs, exposed so a tree can call them instead.
+
+	/** Publishes what the guard is doing. The HUD and the checks read this. */
+	UFUNCTION(BlueprintCallable, Category = "Guard")
+	void SetGuardState(EEOGuardState NewState) { SetState(NewState); }
+
+	UFUNCTION(BlueprintCallable, Category = "Guard|Movement")
+	void TickPatrolMovement(float DeltaSeconds);
+
+	UFUNCTION(BlueprintCallable, Category = "Guard|Movement")
+	void TickPursueMovement(float DeltaSeconds);
+
+	/** Returns true once the search has run its course. */
+	UFUNCTION(BlueprintCallable, Category = "Guard|Movement")
+	bool TickSearchMovement(float DeltaSeconds);
+
+	/** Fires if alerted, in sight and off cooldown. */
+	UFUNCTION(BlueprintCallable, Category = "Guard|Combat")
+	void TickEngagement(float DeltaSeconds);
+
+	UFUNCTION(BlueprintPure, Category = "Guard")
+	bool IsTargetVisible() const { return bTargetVisible; }
+
+	UFUNCTION(BlueprintPure, Category = "Guard")
+	float GetTimeSinceSeen() const { return TimeSinceSeen; }
+
+	/**
+	 * True when a StateTree is driving. The C++ state machine stands down, so
+	 * that assigning a tree is the whole switch and removing it is the whole
+	 * revert.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Guard")
+	bool IsDrivenByStateTree() const;
+
 	/**
 	 * True if the operative is positioned for a silent kill: close, behind, and
 	 * the guard has not confirmed them. An alerted guard cannot be taken down,

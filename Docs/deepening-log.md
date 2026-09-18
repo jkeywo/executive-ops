@@ -321,8 +321,27 @@ pawn, because the aircraft is a pawn too.
   maps and rewrites Blueprint defaults - that would have taken the animation
   graph wiring with it.
 
-**Still to do:** the StateTree. The guard's five states remain a C++ enum, which
-is the part of `Docs/adr/0005` not yet honoured.
+**The StateTree is written but not wired.** The schema, four tasks, three
+conditions and the `UStateTreeAIComponent` on the controller all exist and
+compile. The graph does not, and cannot be made here: `FStateTreeCompiler` lives
+in `StateTreeEditorModule/Private` with no Python binding and no editing
+subsystem, so editor data built from script could never be compiled into a
+runnable tree. Confirmed by probing the API rather than assumed.
+
+Put to the author, who chose to have the C++ written here and author the graph in
+the editor. `Docs/Guard-StateTree.md` is the wiring instruction.
+
+- **[autonomous]** The guard's C++ state machine stays as the fallback and runs
+  whenever no tree is assigned, so this lands without changing any behaviour:
+  assigning a tree is the whole switch and clearing it is the whole revert. The
+  alternative - deleting the machine and shipping a guard that does nothing until
+  an asset exists - would have left the branch broken for however long the
+  authoring took.
+- **[autonomous]** Tasks set the pawn's `EEOGuardState` on entry rather than the
+  tree owning that state privately. It is what the HUD reads, what the encounter
+  checks assert on, and what refuses a takedown, so the tree drives behaviour
+  without becoming the only thing that knows what is happening. It also means the
+  127 ground checks stay meaningful across the switch.
 
 ## Suggested order for the rest
 

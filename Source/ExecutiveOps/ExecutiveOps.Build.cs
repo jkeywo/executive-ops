@@ -17,6 +17,8 @@ public class ExecutiveOps : ModuleRules
 			"AIModule",
 			"NavigationSystem",
 			"GameplayTasks",
+			"StateTreeModule",
+			"GameplayStateTreeModule",
 			"Niagara",
 			"DeveloperSettings",
 			"ProceduralMeshComponent"

@@ -426,6 +426,77 @@ bool AEOGuardCharacter::MoveToward(const FVector& TargetLocation, float DeltaSec
 	return false;
 }
 
+bool AEOGuardCharacter::IsDrivenByStateTree() const
+{
+	const AEOGuardAIController* AI = Cast<AEOGuardAIController>(GetController());
+	return AI && AI->IsRunningStateTree();
+}
+
+void AEOGuardCharacter::TickPatrolMovement(float DeltaSeconds)
+{
+	if (PatrolOffsets.Num() == 0)
+	{
+		return;
+	}
+
+	if (PatrolWaitRemaining > 0.f)
+	{
+		PatrolWaitRemaining -= DeltaSeconds;
+		return;
+	}
+
+	const FVector Waypoint = PatrolOrigin + PatrolOffsets[PatrolIndex % PatrolOffsets.Num()];
+	if (MoveToward(Waypoint, DeltaSeconds, 90.f))
+	{
+		PatrolIndex = (PatrolIndex + 1) % PatrolOffsets.Num();
+		PatrolWaitRemaining = PatrolWaitTime;
+	}
+}
+
+void AEOGuardCharacter::TickPursueMovement(float DeltaSeconds)
+{
+	if (!Target)
+	{
+		return;
+	}
+
+	const FVector Pursue = GetPursuitLocation();
+	const FVector ToTarget = Pursue - GetActorLocation();
+	if (!ToTarget.IsNearlyZero())
+	{
+		SetActorRotation(FRotator(0.f, ToTarget.Rotation().Yaw, 0.f));
+	}
+
+	// Close to a useful range and hold there: the guard should stay dangerous
+	// without walking into the operative's knife.
+	if (ToTarget.Size2D() > PreferredCombatRange)
+	{
+		MoveToward(Pursue, DeltaSeconds, PreferredCombatRange);
+	}
+}
+
+bool AEOGuardCharacter::TickSearchMovement(float DeltaSeconds)
+{
+	if (MoveToward(LastKnownTargetLocation, DeltaSeconds, 120.f))
+	{
+		// Arrived and found nothing: look around rather than standing still.
+		AddActorWorldRotation(FRotator(0.f, 60.f * DeltaSeconds, 0.f));
+	}
+
+	SearchRemaining -= DeltaSeconds;
+	return SearchRemaining <= 0.f;
+}
+
+void AEOGuardCharacter::TickEngagement(float DeltaSeconds)
+{
+	if (bTargetVisible && Weapon->IsReady() && FirstShotRemaining <= 0.f)
+	{
+		FireAtTarget();
+	}
+
+	FirstShotRemaining = FMath::Max(FirstShotRemaining - DeltaSeconds, 0.f);
+}
+
 void AEOGuardCharacter::UpdateMovement(float DeltaSeconds)
 {
 	switch (State)
@@ -757,20 +828,32 @@ void AEOGuardCharacter::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Perception always runs: the tree reads what the guard knows, it does not
+	// replace how the guard comes to know it.
 	UpdatePerception(DeltaSeconds);
-	UpdateState(DeltaSeconds);
-	UpdateMovement(DeltaSeconds);
+
+	// Deciding and acting belong to the tree when there is one. Assigning a tree
+	// is then the whole switch, and removing it is the whole revert.
+	if (!IsDrivenByStateTree())
+	{
+		UpdateState(DeltaSeconds);
+		UpdateMovement(DeltaSeconds);
+	}
 
 	// The weapon owns the rate of fire and counts its own cooldown down. The
 	// guard used to keep a second copy of both, which meant two numbers that had
 	// to agree.
-	if (State == EEOGuardState::Alerted && bTargetVisible && Weapon->IsReady()
+	if (!IsDrivenByStateTree()
+		&& State == EEOGuardState::Alerted && bTargetVisible && Weapon->IsReady()
 		&& FirstShotRemaining <= 0.f)
 	{
 		FireAtTarget();
 	}
 
-	FirstShotRemaining = FMath::Max(FirstShotRemaining - DeltaSeconds, 0.f);
+	if (!IsDrivenByStateTree())
+	{
+		FirstShotRemaining = FMath::Max(FirstShotRemaining - DeltaSeconds, 0.f);
+	}
 
 	UpdateAnimation();
 }

@@ -7,6 +7,8 @@
 class UAIPerceptionComponent;
 class UAISenseConfig_Sight;
 class AEOOperativeCharacter;
+class UStateTreeAIComponent;
+class UStateTree;
 
 /**
  * The guard's senses, and in time its brain.
@@ -45,6 +47,25 @@ public:
 	 */
 	AEOOperativeCharacter* GetOperative() const;
 
+	/**
+	 * True once a StateTree is actually running.
+	 *
+	 * The guard's C++ state machine stands down when this is true, so assigning
+	 * a tree is the whole switch and clearing it is the whole revert. Until an
+	 * asset is assigned the guard behaves exactly as it always has.
+	 */
+	bool IsRunningStateTree() const;
+
+	/**
+	 * The tree that decides what this guard does. Optional.
+	 *
+	 * Left unset deliberately: the nodes in EOGuardStateTreeNodes.h exist and
+	 * compile, but the graph wiring them together is an asset, and an asset is
+	 * authored rather than generated. See Docs/adr/0005.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Guard|Brain")
+	TObjectPtr<UStateTree> BrainTree;
+
 protected:
 	virtual void OnPossess(APawn* InPawn) override;
 
@@ -56,6 +77,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Guard|Perception")
 	TObjectPtr<UAISenseConfig_Sight> Sight;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Guard|Brain")
+	TObjectPtr<UStateTreeAIComponent> Brain;
 
 private:
 	/** Actors sight currently has. One entry, in practice. */

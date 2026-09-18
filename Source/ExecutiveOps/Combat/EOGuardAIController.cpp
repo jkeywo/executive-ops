@@ -7,6 +7,8 @@
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AISense_Sight.h"
+#include "Components/StateTreeAIComponent.h"
+#include "StateTreeExecutionTypes.h"
 
 AEOGuardAIController::AEOGuardAIController()
 {
@@ -27,6 +29,8 @@ AEOGuardAIController::AEOGuardAIController()
 
 	Perception->OnTargetPerceptionUpdated.AddDynamic(
 		this, &AEOGuardAIController::HandlePerceptionUpdated);
+
+	Brain = CreateDefaultSubobject<UStateTreeAIComponent>(TEXT("Brain"));
 }
 
 void AEOGuardAIController::OnPossess(APawn* InPawn)
@@ -51,6 +55,19 @@ void AEOGuardAIController::OnPossess(APawn* InPawn)
 
 	Perception->ConfigureSense(*Sight);
 	Perception->RequestStimuliListenerUpdate();
+
+	// Only starts if an asset has been assigned. Without one the guard keeps its
+	// C++ state machine, which is why this can land before the graph exists.
+	if (Brain && BrainTree)
+	{
+		Brain->SetStateTree(BrainTree);
+		Brain->StartLogic();
+	}
+}
+
+bool AEOGuardAIController::IsRunningStateTree() const
+{
+	return Brain && BrainTree && Brain->IsRunning();
 }
 
 void AEOGuardAIController::HandlePerceptionUpdated(AActor* Actor, FAIStimulus Stimulus)
