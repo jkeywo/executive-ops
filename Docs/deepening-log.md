@@ -260,12 +260,30 @@ Three candidates remain, all of them asset-authoring jobs. Each has a settled
 direction recorded in `Docs/adr/`, so the decision work is not lost - only the
 execution, and all three want the editor open rather than a headless agent.
 
-**C3 - one HUD state, two adapters, on UMG.** The largest single job here: 1,184
-lines of Canvas drawing across three `AHUD` classes, plus widget assets, plus
-replacing `EOHudScreenComponent`'s render-target trick with a
-`UWidgetComponent`. Nothing was started, deliberately - a half-migrated HUD is
-worse than either end state, and the gather seam is only worth building once the
-widgets that consume it exist.
+**C3 - one HUD state, two adapters, on UMG.** *(the seam is in; the widgets are
+not)*
+
+`UEOHudStateGatherer` now owns reading the world, and `FEOHUDState` has its own
+header rather than living inside `EOPlayerHUD.h`. Gathering is no longer
+something only an `AHUD` can do, which is the precondition for both adapters: the
+viewport and the in-world panel want the same state, and neither should re-derive
+it.
+
+Done first, and on its own, because it is the part that does not depend on the
+drawing technology. The widgets can now be built against a seam that already
+exists rather than the seam being retrofitted around them.
+
+- **[autonomous]** The gatherer binds `OnMissionStateChanged` and rescans on a
+  transition. That delegate had no subscriber at all - the review flagged it as
+  declared-and-unused - and the effect was that the interface could lag a state
+  change the player had just caused by up to the one-second scan interval.
+  Continuous values are still pulled per frame, which is the split the grilling
+  settled on.
+
+**Still to do:** the UMG widgets themselves, and replacing `EOHudScreenComponent`'s
+render-target trick with a `UWidgetComponent`. Both want the editor open. The
+remaining Canvas drawing is untouched and still works, so this is a seam added
+rather than a migration half-done.
 
 **C4 - the rest.** Converting the 143 existing checks and turning the two suites
 into `AFunctionalTest`s. The module split is done; what remains is the checks

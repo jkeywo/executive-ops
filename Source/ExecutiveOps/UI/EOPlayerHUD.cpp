@@ -1,4 +1,6 @@
 #include "UI/EOPlayerHUD.h"
+
+#include "UI/EOHudStateGatherer.h"
 #include "UI/EOHUDUnits.h"
 
 #include "Aircraft/EOAircraftPawn.h"
@@ -91,8 +93,15 @@ void AEOPlayerHUD::DrawHUD()
 		return;
 	}
 
+	if (!Gatherer)
+	{
+		Gatherer = NewObject<UEOHudStateGatherer>(this, TEXT("HudStateGatherer"));
+	}
+
+	// Read the world once. Every slot below takes this and nothing else, which is
+	// what stops nine readouts being derived twice per frame.
 	FEOHUDState State;
-	if (!GatherState(State))
+	if (!Gatherer->Gather(Cast<AEOPlayerController>(PlayerOwner), State))
 	{
 		return;
 	}
@@ -186,96 +195,6 @@ void AEOPlayerHUD::DrawScreenFeedback(const FEOHUDLayout& L, const FEOHUDState& 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-
-bool AEOPlayerHUD::GatherState(FEOHUDState& Out)
-{
-	Out.Controller = Cast<AEOPlayerController>(PlayerOwner);
-	if (!Out.Controller)
-	{
-		return false;
-	}
-
-	Out.Pawn = Out.Controller->GetPawn();
-	if (!Out.Pawn)
-	{
-		return false;
-	}
-
-	RefreshActorCache();
-
-	Out.bFlying = Out.Controller->GetControlMode() == EEOControlMode::Aircraft;
-
-	Out.Operative = Cast<AEOOperativeCharacter>(Out.Pawn);
-	Out.Aircraft = Cast<AEOAircraftPawn>(Out.Pawn);
-	if (!Out.Aircraft)
-	{
-		// On the ground the craft is still part of the mission, so the asset slot
-		// keeps reporting it.
-		Out.Aircraft = CachedAircraft.Get();
-	}
-
-	Out.Mission = GetWorld() ? GetWorld()->GetSubsystem<UEOMissionSubsystem>() : nullptr;
-	Out.Site = Out.Mission ? Out.Mission->GetSelectedSite() : nullptr;
-	Out.Extraction = CachedExtraction.Get();
-
-	const FVector ViewerLocation = Out.Pawn->GetActorLocation();
-	for (const TWeakObjectPtr<AEOGuardCharacter>& Weak : CachedGuards)
-	{
-		AEOGuardCharacter* Guard = Weak.Get();
-		if (Guard && !Guard->IsDead())
-		{
-			Out.Guards.Add(Guard);
-		}
-	}
-
-	Out.Guards.Sort([&ViewerLocation](const AEOGuardCharacter& A, const AEOGuardCharacter& B)
-	{
-		return FVector::DistSquared(A.GetActorLocation(), ViewerLocation)
-			< FVector::DistSquared(B.GetActorLocation(), ViewerLocation);
-	});
-
-	return true;
-}
-
-void AEOPlayerHUD::RefreshActorCache()
-{
-	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	const float Now = World->GetTimeSeconds();
-	if (Now - LastActorScanTime < ActorScanInterval)
-	{
-		return;
-	}
-	LastActorScanTime = Now;
-
-	CachedGuards.Reset();
-	for (TActorIterator<AEOGuardCharacter> It(World); It; ++It)
-	{
-		CachedGuards.Add(*It);
-	}
-
-	if (!CachedAircraft.IsValid())
-	{
-		for (TActorIterator<AEOAircraftPawn> It(World); It; ++It)
-		{
-			CachedAircraft = *It;
-			break;
-		}
-	}
-
-	if (!CachedExtraction.IsValid())
-	{
-		for (TActorIterator<AEOExtractionZone> It(World); It; ++It)
-		{
-			CachedExtraction = *It;
-			break;
-		}
-	}
-}
 
 FEOHUDLayout AEOPlayerHUD::BuildLayout() const
 {

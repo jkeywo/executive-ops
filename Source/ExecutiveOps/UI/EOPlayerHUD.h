@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "UI/EONavigationHUD.h"
+#include "UI/EOHudState.h"
 #include "EOPlayerHUD.generated.h"
 
 class AEOAircraftPawn;
@@ -48,26 +49,6 @@ struct FEOHUDLayout
 	float S(float DesignPixels) const { return DesignPixels * Scale; }
 };
 
-/** Everything the eight slots read, gathered once so no slot re-queries the world. */
-struct FEOHUDState
-{
-	AEOPlayerController* Controller = nullptr;
-	APawn* Pawn = nullptr;
-
-	/** The craft, whether the player is in it or it is waiting overhead. */
-	AEOAircraftPawn* Aircraft = nullptr;
-	AEOOperativeCharacter* Operative = nullptr;
-
-	UEOMissionSubsystem* Mission = nullptr;
-	AEOMissionSite* Site = nullptr;
-	AEOExtractionZone* Extraction = nullptr;
-
-	/** Guards that are not dead, nearest first. */
-	TArray<AEOGuardCharacter*> Guards;
-
-	/** True while the player is flying rather than on foot. */
-	bool bFlying = false;
-};
 
 /**
  * The player HUD: one frame of eight slots, drawn for both the aircraft and the
@@ -95,13 +76,16 @@ public:
 
 	virtual void DrawHUD() override;
 
+	/** Reads the world once a frame; the slots read only what it returns. */
+	UPROPERTY(Transient)
+	TObjectPtr<class UEOHudStateGatherer> Gatherer;
+
 	/** Hides the frame without hiding the waypoint or the map. */
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	void ToggleFrame() { bFrameVisible = !bFrameVisible; }
 
 protected:
 	/** Collects the frame's inputs. False if there is nothing worth drawing. */
-	bool GatherState(FEOHUDState& OutState);
 
 	FEOHUDLayout BuildLayout() const;
 
@@ -188,17 +172,4 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "HUD")
 	float ThreatArcRadius = 92.f;
 
-	/** Seconds between rescans for guards and the aircraft. */
-	UPROPERTY(EditDefaultsOnly, Category = "HUD")
-	float ActorScanInterval = 1.f;
-
-private:
-	/** Rescanned on an interval rather than every frame: the cast list rarely changes. */
-	void RefreshActorCache();
-
-	TArray<TWeakObjectPtr<AEOGuardCharacter>> CachedGuards;
-	TWeakObjectPtr<AEOAircraftPawn> CachedAircraft;
-	TWeakObjectPtr<AEOExtractionZone> CachedExtraction;
-
-	float LastActorScanTime = -BIG_NUMBER;
 };
