@@ -7,6 +7,8 @@
 #include "Combat/EOGuardCharacter.h"
 #include "Combat/EOHealthComponent.h"
 #include "Combat/EOWeaponComponent.h"
+#include "Perception/AIPerceptionStimuliSourceComponent.h"
+#include "Perception/AISense_Sight.h"
 #include "Kismet/GameplayStatics.h"
 #include "Mission/EOInteractableInterface.h"
 #include "EngineUtils.h"
@@ -90,6 +92,11 @@ AEOOperativeCharacter::AEOOperativeCharacter()
 
 	Weapon = CreateDefaultSubobject<UEOWeaponComponent>(TEXT("Weapon"));
 	Weapon->FireEvent = EOFeedbackEvents::Pistol_Fire;
+
+	PerceptionSource = CreateDefaultSubobject<UAIPerceptionStimuliSourceComponent>(
+		TEXT("PerceptionSource"));
+	PerceptionSource->bAutoRegister = true;
+	PerceptionSource->RegisterForSense(UAISense_Sight::StaticClass());
 
 	PrimaryActorTick.bCanEverTick = true;
 }

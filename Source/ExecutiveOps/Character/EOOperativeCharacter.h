@@ -127,6 +127,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat")
 	TObjectPtr<class UEOWeaponComponent> Weapon;
 
+	/**
+	 * Registers the operative as something AI sight can pick up.
+	 *
+	 * Explicit rather than auto-registering every pawn, so what is meant to be
+	 * seen is stated rather than inferred - the aircraft is a pawn too.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Perception")
+	TObjectPtr<class UAIPerceptionStimuliSourceComponent> PerceptionSource;
+
 	/** The pistol itself. Rides a bone at all times; only which bone changes. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Combat|Weapon")
 	TObjectPtr<UStaticMeshComponent> PistolMesh;

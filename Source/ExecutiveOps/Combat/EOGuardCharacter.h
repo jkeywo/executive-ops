@@ -64,6 +64,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Guard")
 	float GetDetectionAlpha() const { return DetectionAlpha; }
 
+	/** Read by the AI controller to shape its sight cone, so tuning stays here. */
+	float GetSightRange() const { return SightRange; }
+	float GetSightHalfAngle() const { return SightHalfAngle; }
+
 	/**
 	 * True if the operative is positioned for a silent kill: close, behind, and
 	 * the guard has not confirmed them. An alerted guard cannot be taken down,

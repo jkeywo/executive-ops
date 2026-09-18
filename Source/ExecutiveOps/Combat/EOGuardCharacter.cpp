@@ -2,6 +2,7 @@
 
 #include "Animation/AnimSequence.h"
 #include "Character/EOOperativeCharacter.h"
+#include "Combat/EOGuardAIController.h"
 #include "Combat/EOHealthComponent.h"
 #include "Combat/EOWeaponComponent.h"
 #include "Combat/EOTakedownDamageType.h"
@@ -43,6 +44,11 @@ AEOGuardCharacter::AEOGuardCharacter()
 	// Without a controller the movement component never runs, so a guard spawned
 	// at runtime would neither move nor fall, silently.
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+	AIControllerClass = AEOGuardAIController::StaticClass();
+
+	// Sight traces from the pawn's view point, so the eye the perception system
+	// looks from is the same one the close-range check below uses.
+	BaseEyeHeight = EyeHeight;
 }
 
 void AEOGuardCharacter::BeginPlay()
@@ -70,66 +76,46 @@ bool AEOGuardCharacter::CheckVision(AActor*& OutSeen) const
 {
 	OutSeen = nullptr;
 
-	UWorld* World = GetWorld();
-	if (!World)
+	const AEOGuardAIController* AI = Cast<AEOGuardAIController>(GetController());
+	if (!AI)
 	{
 		return false;
 	}
 
-	// One guard, one possible target: the operative. A perception system that
-	// enumerated stimuli would be the "final alert architecture" M5 says to skip.
-	for (TActorIterator<AEOOperativeCharacter> It(World); It; ++It)
+	AEOOperativeCharacter* Operative = AI->GetOperative();
+	if (!Operative || Operative->IsStowed())
 	{
-		AEOOperativeCharacter* Operative = *It;
-
 		// An operative that is stowed or still falling out of the aircraft is not
 		// in the world as far as the guard is concerned.
-		if (!Operative || Operative->IsStowed())
+		return false;
+	}
+
+	if (const UEOHealthComponent* TargetHealth = Operative->GetHealth())
+	{
+		if (TargetHealth->IsDead())
 		{
-			continue;
+			return false;
 		}
+	}
 
-		if (const UEOHealthComponent* TargetHealth = Operative->GetHealth())
-		{
-			if (TargetHealth->IsDead())
-			{
-				continue;
-			}
-		}
+	// Range, cone and line of sight are the perception system's job now. This
+	// used to be an iteration over every actor in the world followed by three
+	// hand-rolled tests, once per guard per frame.
+	if (AI->IsPerceiving(Operative))
+	{
+		OutSeen = Operative;
+		return true;
+	}
 
-		const FVector EyeLocation = GetActorLocation() + FVector(0.f, 0.f, EyeHeight);
-		const FVector ToTarget = Operative->GetActorLocation() - EyeLocation;
-		const float Distance = ToTarget.Size();
-
-		if (Distance > SightRange)
-		{
-			continue;
-		}
-
-		// Close enough and the guard notices regardless of where they are looking:
-		// walking straight into someone's back should not be free.
-		if (Distance > ProximityRange)
-		{
-			// The cone is judged horizontally. The guard never pitches, so
-			// measuring in 3D would spend the whole cone budget on height and
-			// blind it to anyone standing on a walkway in front of it.
-			const FVector FlatToTarget = FVector(ToTarget.X, ToTarget.Y, 0.f).GetSafeNormal();
-			if (!FlatToTarget.IsNearlyZero())
-			{
-				const float Angle = FMath::RadiansToDegrees(FMath::Acos(
-					FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), FlatToTarget)));
-				if (Angle > SightHalfAngle)
-				{
-					continue;
-				}
-			}
-		}
-
-		if (!HasLineOfSightTo(*Operative))
-		{
-			continue;
-		}
-
+	// Close enough and the guard notices regardless of where they are looking:
+	// walking straight into someone's back should not be free. Sight cannot
+	// express this - it is the one rule that is deliberately cone-independent -
+	// so it stays here, checked against the one candidate rather than against
+	// the world.
+	const FVector EyeLocation = GetActorLocation() + FVector(0.f, 0.f, EyeHeight);
+	if (FVector::Dist(Operative->GetActorLocation(), EyeLocation) <= ProximityRange
+		&& HasLineOfSightTo(*Operative))
+	{
 		OutSeen = Operative;
 		return true;
 	}

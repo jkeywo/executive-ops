@@ -14,6 +14,9 @@ public class ExecutiveOps : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"GameplayTags",
+			"AIModule",
+			"NavigationSystem",
+			"GameplayTasks",
 			"Niagara",
 			"DeveloperSettings",
 			"ProceduralMeshComponent"
