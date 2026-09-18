@@ -80,6 +80,18 @@ public:
 	UPROPERTY(Transient)
 	TObjectPtr<class UEOHudStateGatherer> Gatherer;
 
+	/**
+	 * The viewport widget, when one is assigned in the HUD settings.
+	 *
+	 * While it exists the Canvas slots stand down and the widget draws instead,
+	 * from the same state. Until then the Canvas keeps drawing, which is what lets
+	 * the widget be authored against a running game rather than a blank one.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<class UEOHudWidget> Widget;
+
+	virtual void BeginPlay() override;
+
 	/** Hides the frame without hiding the waypoint or the map. */
 	UFUNCTION(BlueprintCallable, Category = "HUD")
 	void ToggleFrame() { bFrameVisible = !bFrameVisible; }

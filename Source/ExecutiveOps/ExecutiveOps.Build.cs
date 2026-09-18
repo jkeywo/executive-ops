@@ -19,6 +19,7 @@ public class ExecutiveOps : ModuleRules
 			"GameplayTasks",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
+			"UMG",
 			"Niagara",
 			"DeveloperSettings",
 			"ProceduralMeshComponent"

@@ -1,6 +1,11 @@
 #include "UI/EOPlayerHUD.h"
 
+#include "UI/EOHudSettings.h"
 #include "UI/EOHudStateGatherer.h"
+#include "UI/EOHudViewModel.h"
+#include "UI/EOHudWidget.h"
+
+#include "Blueprint/UserWidget.h"
 #include "UI/EOHUDUnits.h"
 
 #include "Aircraft/EOAircraftPawn.h"
@@ -37,23 +42,6 @@ namespace
 	const FLinearColor Hairline(0.902f, 0.945f, 0.957f, 0.10f);
 
 
-	/** Degrees from where the player is facing to a world position, wrapped to +-180. */
-	float RelativeBearing(const FVector& From, const FVector& To, float ReferenceYaw)
-	{
-		const FVector Offset = To - From;
-		const float TargetYaw = FMath::RadiansToDegrees(FMath::Atan2(Offset.Y, Offset.X));
-		return FMath::FindDeltaAngleDegrees(ReferenceYaw, TargetYaw);
-	}
-
-	/** What the compass and the threat arcs are both measured against. */
-	float GetReferenceYaw(const APawn& Pawn, const APlayerController& Controller, bool bFlying)
-	{
-		// The craft's nose is the heading while flying - free-look swings the camera
-		// without changing where the aircraft is going. On foot the two are the same
-		// thing, and the view is the one the arcs have to agree with.
-		return bFlying ? Pawn.GetActorRotation().Yaw : Controller.GetControlRotation().Yaw;
-	}
-
 	/** Dropped behind every glyph: the HUD has to read over a white rooftop as well as a night sky. */
 	const FLinearColor TextShadow(0.f, 0.f, 0.f, 0.7f);
 
@@ -68,6 +56,23 @@ AEOPlayerHUD::AEOPlayerHUD()
 	// The text readout is scaffolding, not the HUD. It stays one console command
 	// away (EOToggleDebugHUD) rather than sitting on top of the frame.
 	bDebugVisible = false;
+}
+
+void AEOPlayerHUD::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Optional by design. No class assigned means no widget, and the Canvas slots
+	// keep drawing - so the interface can be built one slot at a time against a
+	// game that still shows everything.
+	if (UClass* WidgetClass = UEOHudSettings::Get().ViewportWidget.LoadSynchronous())
+	{
+		Widget = CreateWidget<UEOHudWidget>(PlayerOwner, WidgetClass, TEXT("HudWidget"));
+		if (Widget)
+		{
+			Widget->AddToViewport();
+		}
+	}
 }
 
 void AEOPlayerHUD::DrawHUD()
@@ -103,6 +108,16 @@ void AEOPlayerHUD::DrawHUD()
 	FEOHUDState State;
 	if (!Gatherer->Gather(Cast<AEOPlayerController>(PlayerOwner), State))
 	{
+		return;
+	}
+
+	// A live widget is the interface. The Canvas slots stand down rather than
+	// drawing underneath it; the screen feedback stays, because it is hiding a
+	// cut and a widget is not the thing to trust with that.
+	if (Widget)
+	{
+		Widget->Apply(FEOHudViewModel::Build(State));
+		DrawScreenFeedback(Layout, State);
 		return;
 	}
 
@@ -295,7 +310,7 @@ void AEOPlayerHUD::DrawBearingSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 	const float Baseline = Y + RibbonH;
 	const float HalfSpan = FMath::Max(CompassSpanDegrees * 0.5f, 5.f);
 
-	const float ReferenceYaw = GetReferenceYaw(*S.Pawn, *S.Controller, S.bFlying);
+	const float ReferenceYaw = EOHUD::ReferenceYaw(*S.Pawn, *S.Controller, S.bFlying);
 
 	auto BearingToX = [&](float AbsoluteBearing, bool& bVisible) -> float
 	{
@@ -339,7 +354,7 @@ void AEOPlayerHUD::DrawBearingSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 	{
 		bool bVisible = false;
 		const float MarkerX = BearingToX(
-			ReferenceYaw + RelativeBearing(S.Pawn->GetActorLocation(), S.Site->GetHoverPoint(), ReferenceYaw),
+			ReferenceYaw + EOHUD::RelativeBearing(S.Pawn->GetActorLocation(), S.Site->GetHoverPoint(), ReferenceYaw),
 			bVisible);
 		if (bVisible)
 		{
@@ -351,7 +366,7 @@ void AEOPlayerHUD::DrawBearingSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 	{
 		bool bVisible = false;
 		const float MarkerX = BearingToX(
-			ReferenceYaw + RelativeBearing(S.Pawn->GetActorLocation(), S.Extraction->GetActorLocation(), ReferenceYaw),
+			ReferenceYaw + EOHUD::RelativeBearing(S.Pawn->GetActorLocation(), S.Extraction->GetActorLocation(), ReferenceYaw),
 			bVisible);
 		if (bVisible)
 		{
@@ -650,7 +665,7 @@ void AEOPlayerHUD::DrawFocusSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 
 	// Threat arcs: direction and certainty, never positions. Dashed while a guard
 	// is still making its mind up, solid once it has.
-	const float ReferenceYaw = GetReferenceYaw(*S.Pawn, *S.Controller, S.bFlying);
+	const float ReferenceYaw = EOHUD::ReferenceYaw(*S.Pawn, *S.Controller, S.bFlying);
 	const float Radius = L.S(ThreatArcRadius);
 
 	for (const AEOGuardCharacter* Guard : S.Guards)
@@ -664,7 +679,7 @@ void AEOPlayerHUD::DrawFocusSlot(const FEOHUDLayout& L, const FEOHUDState& S)
 			continue;
 		}
 
-		const float Bearing = RelativeBearing(S.Pawn->GetActorLocation(), Guard->GetActorLocation(), ReferenceYaw);
+		const float Bearing = EOHUD::RelativeBearing(S.Pawn->GetActorLocation(), Guard->GetActorLocation(), ReferenceYaw);
 
 		const FLinearColor Colour = bAlerted ? Alarm : (bSearching ? Caution : Ink);
 		const float Thickness = bAlerted ? Thin * 5.f : Thin * (2.f + Detection * 2.f);

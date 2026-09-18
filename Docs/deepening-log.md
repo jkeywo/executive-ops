@@ -267,30 +267,55 @@ Three candidates remain, all of them asset-authoring jobs. Each has a settled
 direction recorded in `Docs/adr/`, so the decision work is not lost - only the
 execution, and all three want the editor open rather than a headless agent.
 
-**C3 - one HUD state, two adapters, on UMG.** *(the seam is in; the widgets are
-not)*
+**C3 - one HUD state, two adapters, on UMG.** *(the C++ is in; the layout is the
+author's)*
 
-`UEOHudStateGatherer` now owns reading the world, and `FEOHUDState` has its own
-header rather than living inside `EOPlayerHUD.h`. Gathering is no longer
-something only an `AHUD` can do, which is the precondition for both adapters: the
-viewport and the in-world panel want the same state, and neither should re-derive
-it.
+The layout cannot be scripted - `WidgetTree` exposes nothing to Python, though
+a Widget Blueprint shell can be generated - so this took the split that worked
+for the StateTree: the classes and bindings here, the arrangement in the editor.
+`Docs/HUD-Widgets.md` lists the named slots.
 
-Done first, and on its own, because it is the part that does not depend on the
-drawing technology. The widgets can now be built against a seam that already
-exists rather than the seam being retrofitted around them.
+Three modules, in a line:
 
-- **[autonomous]** The gatherer binds `OnMissionStateChanged` and rescans on a
-  transition. That delegate had no subscriber at all - the review flagged it as
-  declared-and-unused - and the effect was that the interface could lag a state
-  change the player had just caused by up to the one-second scan interval.
-  Continuous values are still pulled per frame, which is the split the grilling
-  settled on.
+- `UEOHudStateGatherer` reads the world once. Already in from the earlier pass.
+- `FEOHudViewModel` reduces that to what the player sees - strings, fractions
+  and tones, with nothing about pixels in it. Built once per frame. The
+  reductions (directive text, standing tier, stance, extraction status) are
+  static functions on plain inputs, so they are asserted on directly by four
+  automation tests that need no world. They were unreachable inside the Canvas
+  draw functions.
+- `UEOHudWidget` copies the view model into named slots and does nothing else.
+  Every slot is `BindWidgetOptional`, so a Blueprint that has placed only some
+  of them still runs - which is what lets the interface be authored one slot at
+  a time against a game that keeps working.
 
-**Still to do:** the UMG widgets themselves, and replacing `EOHudScreenComponent`'s
-render-target trick with a `UWidgetComponent`. Both want the editor open. The
-remaining Canvas drawing is untouched and still works, so this is a seam added
-rather than a migration half-done.
+- **[autonomous]** The widget class is assigned through `UEOHudSettings`, a
+  `UDeveloperSettings`, rather than a property on a Blueprint subclass of the
+  HUD. The HUD class is set in C++ by the game mode, so there was no Blueprint
+  to hang it on, and the project already uses settings objects for the feedback
+  presets and the input config.
+- **[autonomous]** Until a widget class is assigned the Canvas slots keep
+  drawing; assigning one is the switch, and the Canvas stands down for
+  everything but the screen flash and vignette, which are hiding a cut. Same
+  arrangement as the StateTree fallback, for the same reason: the alternative is
+  a blank interface for as long as authoring takes. The Canvas code comes out
+  once the widget is verified, as the guard's state machine did.
+- **[autonomous]** The Canvas draw functions were not rewritten to consume the
+  view model. They are going away, and rewriting 1,100 lines of code that is
+  about to be deleted would be work spent on the wrong side of the seam. The
+  view model is built fresh for the widget path; the two duplicate the display
+  logic only for as long as both exist.
+- **[autonomous]** Tones rather than colours in the view model. Widgets map
+  tone to colour in one function, so a restyle changes that table and nothing
+  upstream - and the panel can use a different palette from the viewport
+  without a second view model.
+
+Verified with no widget class assigned: 9/9 automation, 55/55 flight, 127/127
+ground - so the wiring changes nothing until a Blueprint is pointed at it.
+
+**Still to do:** the author's layout in `WBP_HUD`; then stripping the Canvas
+slots; then the cockpit panel as a `UWidgetComponent` driven by the same view
+model, which is the second adapter and the reason for the seam.
 
 **C4 - the rest.** Converting the 143 existing checks and turning the two suites
 into `AFunctionalTest`s. The module split is done; what remains is the checks
