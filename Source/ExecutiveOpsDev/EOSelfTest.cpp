@@ -1,4 +1,6 @@
-#include "Debug/EOSelfTest.h"
+#include "EOSelfTest.h"
+
+#include "ExecutiveOpsDev.h"
 
 #include "Aircraft/EOAircraftPawn.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -6,6 +8,7 @@
 #include "Character/EOOperativeCharacter.h"
 #include "Combat/EOGuardCharacter.h"
 #include "Combat/EOHealthComponent.h"
+#include "Combat/EOWeaponComponent.h"
 #include "EngineUtils.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -139,12 +142,12 @@ void UEOSelfTest::Check(bool bCondition, const FString& Description)
 	++Checks;
 	if (bCondition)
 	{
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest]   PASS  %s"), *Description);
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest]   PASS  %s"), *Description);
 	}
 	else
 	{
 		++Failures;
-		UE_LOG(LogExecutiveOps, Error, TEXT("[SelfTest]   FAIL  %s"), *Description);
+		UE_LOG(LogExecutiveOpsDev, Error, TEXT("[SelfTest]   FAIL  %s"), *Description);
 	}
 }
 
@@ -159,11 +162,11 @@ void UEOSelfTest::Start(AEOPlayerController* InController)
 	Controller = InController;
 	if (!Controller)
 	{
-		UE_LOG(LogExecutiveOps, Error, TEXT("[SelfTest] no player controller"));
+		UE_LOG(LogExecutiveOpsDev, Error, TEXT("[SelfTest] no player controller"));
 		return;
 	}
 
-	UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] === self-test starting ==="));
+	UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] === self-test starting ==="));
 
 	Phase = IsGroundTest() ? EPhase::GroundSetup : EPhase::CoreState;
 	PhaseDwell = 0.f;
@@ -209,7 +212,7 @@ void UEOSelfTest::Step()
 	// ---- M0: boots into a controllable aircraft ------------------------------
 	case EPhase::CoreState:
 	{
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M0: boot and control --"));
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- M0: boot and control --"));
 		Check(Mission != nullptr, TEXT("mission subsystem exists"));
 		Check(Controller->GetControlMode() == EEOControlMode::Aircraft,
 			TEXT("boots possessing the aircraft"));
@@ -273,7 +276,7 @@ void UEOSelfTest::Step()
 			IEOAircraftControlInterface::Execute_ResetFlightState(Craft);
 			IEOAircraftControlInterface::Execute_SetFlightInput(Craft, FVector(1.f, 0.f, 0.f));
 		}
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M1: flight --"));
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- M1: flight --"));
 		Advance(EPhase::FlightAccelerate, 1.5f);
 		break;
 	}
@@ -352,7 +355,7 @@ void UEOSelfTest::Step()
 			Check(FMath::IsNearlyZero(IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane)),
 				TEXT("reset clears velocity"));
 		}
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M2: navigation --"));
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- M2: navigation --"));
 		Advance(EPhase::MissionSelect, 0.f);
 		break;
 	}
@@ -412,7 +415,7 @@ void UEOSelfTest::Step()
 		Check(Mission && Mission->SelectSite(Site),
 			TEXT("can still retarget while inbound"));
 
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M3: deployment --"));
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- M3: deployment --"));
 
 		// The assist should have pulled the craft onto the hover point by now.
 		if (Site && Craft)
@@ -502,7 +505,7 @@ void UEOSelfTest::Step()
 
 	case EPhase::Extract:
 	{
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- extraction handover --"));
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- extraction handover --"));
 
 		Check(Controller->RequestExtraction(), TEXT("extraction accepted"));
 		Check(Controller->GetControlMode() == EEOControlMode::Aircraft,
@@ -522,7 +525,7 @@ void UEOSelfTest::Step()
 	// ---- M4: ground movement (run with -EOGroundTest in L_MissionTest) --------
 	case EPhase::GroundSetup:
 	{
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M4: ground movement --"));
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- M4: ground movement --"));
 
 		Check(Controller->PossessOperative(), TEXT("can possess the operative"));
 
@@ -700,6 +703,12 @@ void UEOSelfTest::Step()
 		Check(MeshComp != nullptr, TEXT("operative has a mesh to check"));
 		if (MeshComp)
 		{
+			// PlayAnimation switches the component to single-node playback, and
+			// nothing switches it back. Left alone, this check quietly disables the
+			// Animation Blueprint for every phase that follows it - and for anyone
+			// watching the run, which is how it was found.
+			const EAnimationMode::Type PreviousMode = MeshComp->GetAnimationMode();
+
 			const TArray<UAnimSequence*> Clips = Op->GetLocomotionClips();
 			Check(Clips.Num() >= 3, FString::Printf(
 				TEXT("the locomotion clips are assigned (%d)"), Clips.Num()));
@@ -719,6 +728,13 @@ void UEOSelfTest::Step()
 				Check(Drift < 25.f, FString::Printf(
 					TEXT("%s keeps its root on the capsule (%.0fcm)"), *Clip->GetName(), Drift));
 			}
+
+			// Hand the mesh back as it was found. Re-applying the mode is what
+			// rebuilds the Animation Blueprint's instance.
+			if (PreviousMode != EAnimationMode::AnimationSingleNode)
+			{
+				MeshComp->SetAnimationMode(PreviousMode);
+			}
 		}
 
 		Advance(EPhase::MeshDriftCheck, 0.2f);
@@ -727,7 +743,7 @@ void UEOSelfTest::Step()
 
 	case EPhase::MeshDriftCheck:
 	{
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M5: one guard --"));
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- M5: one guard --"));
 
 		// The traversal checks teleport the operative across the whole route, so
 		// the guard has almost certainly seen something by now. Start clean.
@@ -986,11 +1002,36 @@ void UEOSelfTest::Step()
 			{
 				const float GuardStart = Guard->GetHealth()->GetHealth();
 
+				// Take the dice out of the shot. Hip spread is 4.5 degrees and the
+				// cone is centred on the aim line, so even a crosshair dead on the
+				// guard misses some of the time - which is correct for the weapon
+				// and useless in a check that is asking whether damage reaches the
+				// guard at all. That was the cause of this check's long history of
+				// failing intermittently, and it is only fixable now that the
+				// weapon has an interface to ask.
+				//
+				// The cone itself is asserted separately and deterministically, in
+				// ExecutiveOps.Weapon.Spread stays inside its cone.
+				UEOWeaponComponent* Weapon = Op->GetWeapon();
+				const float SavedHipSpread = Weapon ? Weapon->HipSpread : 0.f;
+				const float SavedAimSpread = Weapon ? Weapon->AimSpread : 0.f;
+				if (Weapon)
+				{
+					Weapon->HipSpread = 0.f;
+					Weapon->AimSpread = 0.f;
+				}
+
 				Check(Op->FireWeapon(), TEXT("the weapon fires"));
 				Check(Guard->GetHealth()->GetHealth() < GuardStart,
 					FString::Printf(TEXT("a real shot damages the guard (%.0f -> %.0f)"),
 						GuardStart, Guard->GetHealth()->GetHealth()));
 				Check(!Guard->IsDead(), TEXT("one pistol hit does not kill"));
+
+				if (Weapon)
+				{
+					Weapon->HipSpread = SavedHipSpread;
+					Weapon->AimSpread = SavedAimSpread;
+				}
 
 				Guard->GetHealth()->ApplyDamage(55.f, Op);
 				Check(Guard->IsDead(), TEXT("two pistol hits kill the guard"));
@@ -1043,7 +1084,7 @@ void UEOSelfTest::Step()
 			Check(!Guard->CanSeeTarget(), TEXT("guard cannot see a player who has broken contact"));
 			Check(Guard->GetDetectionAlpha() < 1.f, TEXT("awareness decays once contact is broken"));
 		}
-		UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] -- M6: the mission, run twice --"));
+		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- M6: the mission, run twice --"));
 		MissionAttempt = 1;
 		Advance(EPhase::MissionSetup, 0.f);
 		break;
@@ -1209,7 +1250,7 @@ void UEOSelfTest::Step()
 		}
 
 		// The whole point of M6: it has to be playable again without debug help.
-		UE_LOG(LogExecutiveOps, Display,
+		UE_LOG(LogExecutiveOpsDev, Display,
 			TEXT("[SelfTest] -- M6: resetting and running the mission again --"));
 		Controller->EOReset();
 		MissionAttempt = 2;
@@ -1366,8 +1407,15 @@ void UEOSelfTest::Finish()
 	}
 
 	const bool bPassed = (Failures == 0);
-	UE_LOG(LogExecutiveOps, Display, TEXT("[SelfTest] === %s (%d/%d checks passed) ==="),
+	UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] === %s (%d/%d checks passed) ==="),
 		bPassed ? TEXT("PASSED") : TEXT("FAILED"), Checks - Failures, Checks);
+
+	// Rooted on Start, because nothing else holds a reference once the harness
+	// lives outside the game module. The run is over, so let it go.
+	if (IsRooted())
+	{
+		RemoveFromRoot();
+	}
 
 	if (ShouldExitAfterRun())
 	{

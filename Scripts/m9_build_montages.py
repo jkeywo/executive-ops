@@ -83,13 +83,18 @@ def build_montage(name, clip_path, blend_in, blend_out, slot_name):
         return None
 
     path = DEST + "/" + name
+
+    # Rewritten in place rather than deleted and recreated. BP_Operative holds a
+    # reference to each montage, which makes the delete fail, which makes the
+    # create fail on an occupied path - and the whole run then quietly assigns
+    # nothing. Overwriting keeps every existing reference intact too.
     if EAL.does_asset_exist(path):
-        EAL.delete_asset(path)
+        montage = unreal.load_asset(path)
+    else:
+        factory = unreal.AnimMontageFactory()
+        factory.set_editor_property("target_skeleton", source.get_editor_property("skeleton"))
+        montage = AT.create_asset(name, DEST, unreal.AnimMontage, factory)
 
-    factory = unreal.AnimMontageFactory()
-    factory.set_editor_property("target_skeleton", source.get_editor_property("skeleton"))
-
-    montage = AT.create_asset(name, DEST, unreal.AnimMontage, factory)
     if not montage:
         log("FAILED to create " + path)
         return None
@@ -123,7 +128,7 @@ def build_montage(name, clip_path, blend_in, blend_out, slot_name):
     blend_out_curve.set_editor_property("blend_time", blend_out)
     montage.set_editor_property("blend_out", blend_out_curve)
 
-    EAL.save_loaded_asset(montage)
+    EAL.save_loaded_asset(montage, only_if_is_dirty=False)
     log("built {} from {}".format(path, source.get_name()))
     return montage
 

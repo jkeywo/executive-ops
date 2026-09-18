@@ -59,6 +59,11 @@ BP_OPERATIVE = "/Game/Blueprints/BP_Operative"
 # should dictate the distance exactly.
 USE_ROOT_MOTION = "-rootmotion" in sys.argv
 
+# Re-duplicating from the pack throws away anything done to the graph by hand -
+# the Slot node, layered blends, retuned transitions. So by default an existing
+# graph is kept and only repointed. -rebuild opts into replacing it.
+FORCE_REBUILD = "-rebuild" in sys.argv
+
 
 def log(msg):
     unreal.log_warning("[{}] {}".format(TAG, msg))
@@ -83,9 +88,16 @@ def make_skeletons_compatible():
     ours.add_compatible_skeleton(theirs)
     theirs.add_compatible_skeleton(ours)
 
-    EAL.save_loaded_asset(ours)
-    EAL.save_loaded_asset(theirs)
-    log("skeletons marked compatible in both directions")
+    # Forced saves. add_compatible_skeleton edits the list without marking the
+    # package dirty, so a default save silently skips it: the call appears to
+    # work, the list reads back correctly in the same session, and the change is
+    # gone by the next one - leaving a mesh and a graph that never agree.
+    EAL.save_loaded_asset(ours, only_if_is_dirty=False)
+    EAL.save_loaded_asset(theirs, only_if_is_dirty=False)
+
+    log("skeletons marked compatible in both directions ({} / {})".format(
+        len(ours.get_editor_property("compatible_skeletons")),
+        len(theirs.get_editor_property("compatible_skeletons"))))
 
 
 def root_motion_clip(in_place_clip):
@@ -145,6 +157,9 @@ def detach_from_operative():
 
 def clean_previous():
     """Delete in dependency order: the graph references the blend space."""
+    if not FORCE_REBUILD:
+        return
+
     for path in (ABP_DEST, BS_DEST):
         if EAL.does_asset_exist(path):
             if not EAL.delete_asset(path):
@@ -153,6 +168,12 @@ def clean_previous():
 
 
 def duplicate(src, dst):
+    """Duplicate from the pack, or adopt what is already there."""
+    if EAL.does_asset_exist(dst):
+        existing = unreal.load_asset(dst)
+        log("keeping existing {} (pass -rebuild to replace it from the pack)".format(dst))
+        return existing
+
     asset = EAL.duplicate_asset(src, dst)
     if not asset:
         raise RuntimeError("could not duplicate {} -> {}".format(src, dst))
@@ -211,6 +232,16 @@ def build_anim_blueprint(blend_space):
     """
     abp = duplicate(PACK + "/ThirdPerson_AnimBP", ABP_DEST)
 
+    # Point the graph at the operative's own skeleton.
+    #
+    # A skeletal mesh component refuses to run an Animation Blueprint built for a
+    # different skeleton - it falls back to the reference pose, which looks
+    # exactly like "animation is not playing". Compatible skeletons cover the
+    # clips inside the graph; the graph itself has to target the mesh's skeleton.
+    ours = unreal.load_asset(OUR_SKELETON)
+    abp.set_editor_property("target_skeleton", ours)
+    log("graph retargeted to " + OUR_SKELETON)
+
     # Blend space players first: there is only one in the pack's graph, driving
     # the ground locomotion state.
     for node in abp.get_nodes_of_class(unreal.AnimGraphNode_BlendSpacePlayer):
@@ -238,7 +269,7 @@ def build_anim_blueprint(blend_space):
         log("{} sequence players repointed to root motion".format(swapped))
 
     unreal.BlueprintEditorLibrary.compile_blueprint(abp)
-    EAL.save_loaded_asset(abp)
+    EAL.save_loaded_asset(abp, only_if_is_dirty=False)
     return abp
 
 
@@ -273,8 +304,11 @@ def main():
     log("preparing locomotion animation (root motion: {})".format(USE_ROOT_MOTION))
 
     make_skeletons_compatible()
-    detach_from_operative()
-    clean_previous()
+
+    if FORCE_REBUILD:
+        detach_from_operative()
+        clean_previous()
+
     blend_space = build_blend_space()
     abp = build_anim_blueprint(blend_space)
     report_graph(abp)

@@ -51,14 +51,29 @@ UnrealEditor-Cmd.exe ExecutiveOps.uproject -run=pythonscript -script="C:/Coding/
 The second rebuilds the action montages and needs the graph's slot to exist, so
 run it after the first.
 
-Idempotent: it detaches the old graph from `BP_Operative`, deletes the previous
-duplicates in dependency order, and rebuilds. Add `-rootmotion` to repoint every
-clip at the pack's root-motion twins — see below.
+Idempotent, and **non-destructive**: an existing `ABP_Operative` is kept and only
+repointed, because the graph is edited by hand — the Slot node, layered blends,
+retuned transitions. Pass `-rebuild` to replace it from the pack and lose those.
+`-rootmotion` repoints every clip at the pack's root-motion twins — see below.
 
-The two UE4 mannequin skeletons — ours from Open World Animset, the pack's from
-Dynamic Locomotion — are marked **compatible** in both directions rather than
-retargeted. They are the same rig; they are only separate assets because they
-arrived in separate packs.
+### Two skeletons, one rig
+
+Ours comes from Open World Animset, the pack's from Dynamic Locomotion. They are
+the same UE4 mannequin; they are separate assets only because they arrived in
+separate packs. Two things bridge that:
+
+- The skeletons are marked **compatible** in both directions, which is what lets
+  the pack's clips play on the operative's mesh without retargeting.
+- The **Animation Blueprint itself is retargeted** to the operative's skeleton.
+  A skeletal mesh component will not run a graph built for a different skeleton;
+  it falls back to the reference pose, which looks exactly like "animation is
+  not playing at all". Compatible skeletons cover the clips *inside* the graph —
+  the graph itself has to target the mesh's own skeleton.
+
+`add_compatible_skeleton` does not mark the package dirty, so the script saves
+those two assets with `only_if_is_dirty=False`. Without that the call appears to
+work, reads back correctly in the same session, and is silently gone by the next
+one.
 
 ---
 
@@ -157,6 +172,20 @@ sprinting, aiming, sliding, traversing — the idiomatic route is a C++
 `UAnimInstance` subclass computing them in a thread-safe update, with the graph
 reparented to it. That keeps the casts out of the event graph and the state out
 of the graph's head.
+
+---
+
+## Things that will bite
+
+- **The self-test poses clips directly.** `PlayAnimation` switches the component
+  to single-node playback, and nothing switches it back, so the drift check used
+  to disable the graph for every phase after it. It now restores the previous
+  animation mode. Anything else that calls `PlayAnimation` on the operative owes
+  the same courtesy.
+- **Verify with the engine, not by eye.** `ShowDebug ANIMATION` prints the live
+  node tree — which graph instance is running, which state, which clip, and the
+  slot's weight. A still frame cannot tell a working idle from a reference pose;
+  that readout can.
 
 ---
 
