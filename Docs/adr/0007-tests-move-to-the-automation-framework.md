@@ -15,3 +15,13 @@ as it does now. And checks assert on behaviour and on relationships to the modul
 own tuning values, not on literal magnitudes copied from those values — so a
 retune during a feel pass no longer breaks the tests that are supposed to be
 guarding it.
+
+**Update.** The module split is done: `ExecutiveOpsDev`, marked `DeveloperTool`,
+holds the self-test and the cheats, and is excluded from Shipping while remaining
+available in Development Game builds and the editor.
+
+The dependency inverts through two engine hooks rather than anything bespoke:
+`UCheatManager::RegisterForOnCheatManagerCreated` for the cheats, which become a
+`UCheatManagerExtension` so no controller names a `CheatClass`, and
+`FGameModeEvents::OnGameModePostLoginEvent` for the harness, which now starts
+itself. The game module refers to neither.

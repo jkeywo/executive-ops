@@ -19,7 +19,7 @@ class AEOPlayerController;
  * an exit code of 0 only if every check passed.
  */
 UCLASS()
-class EXECUTIVEOPS_API UEOSelfTest : public UObject
+class EXECUTIVEOPSDEV_API UEOSelfTest : public UObject
 {
 	GENERATED_BODY()
 

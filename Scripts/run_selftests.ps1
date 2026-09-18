@@ -23,7 +23,11 @@ $ErrorActionPreference = "Stop"
 
 $project = Join-Path (Split-Path $PSScriptRoot -Parent) "ExecutiveOps.uproject"
 $editor = Join-Path $Engine "Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
-$log = Join-Path (Split-Path $PSScriptRoot -Parent) "Saved\Logs\ExecutiveOps.log"
+# Each suite writes its own log rather than sharing the editor's default one.
+# The default is held open by any running editor, so deleting it before a run
+# fails outright - which made the suites unrunnable while anyone had the project
+# open, and, worse, silently reported no verdict when it half-worked.
+$logDir = Join-Path (Split-Path $PSScriptRoot -Parent) "Saved\Logs"
 
 if (-not (Test-Path $editor)) { Write-Error "Editor not found: $editor" }
 
@@ -37,10 +41,13 @@ $failed = 0
 foreach ($suite in $suites) {
     Write-Host "running $($suite.Name) suite ..."
 
-    $args = @($project, $suite.Map, "-game", "-nullrhi", "-unattended",
-              "-nosplash", "-nopause", "-EOSelfTest", "-EOSelfTestExit") + $suite.Extra
+    $log = Join-Path $logDir "SelfTest-$($suite.Name).log"
 
-    if (Test-Path $log) { Remove-Item $log -Force }
+    $args = @($project, $suite.Map, "-game", "-nullrhi", "-unattended",
+              "-nosplash", "-nopause", "-abslog=`"$log`"",
+              "-EOSelfTest", "-EOSelfTestExit") + $suite.Extra
+
+    if (Test-Path $log) { Remove-Item $log -Force -ErrorAction SilentlyContinue }
 
     & $editor @args 2>&1 | Out-Null
     $code = $LASTEXITCODE
@@ -52,7 +59,9 @@ foreach ($suite in $suites) {
     $lines = @()
     if (Test-Path $log) {
         $lines = Select-String -Path $log -Pattern "\[SelfTest\]" | ForEach-Object {
-            $_.Line -replace '^.*LogExecutiveOps: ', '' -replace '^(Display|Error): ', ''
+            # The harness moved to the ExecutiveOpsDev module, so its log category
+            # gained a suffix. Matched loosely enough to survive either name.
+            $_.Line -replace '^.*LogExecutiveOps(Dev)?: ', '' -replace '^(Display|Error): ', ''
         }
         if ($Verbose) { $lines | ForEach-Object { Write-Host "  $_" } }
         else { $lines | Where-Object { $_ -match "FAIL|===" } | ForEach-Object { Write-Host "  $_" } }

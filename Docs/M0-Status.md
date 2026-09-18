@@ -39,7 +39,7 @@ UnrealEditor-Cmd.exe ExecutiveOps.uproject /Game/Maps/L_FlightTest -game -nullrh
 | Empty flight map | Done | `Content/Maps/L_FlightTest` — 26 actors, greybox playground |
 | Empty mission map | Done | `Content/Maps/L_MissionTest` — 6 actors, floor and lighting |
 | Simple debug UI | Done | `UI/EODebugHUD` — canvas-drawn, no UMG asset |
-| Restart/reset command | Done | `Debug/EOCheatManager` — `EOReset`, `EORestartLevel` |
+| Restart/reset command | Done | `ExecutiveOpsDev/EOCheatManagerExtension` — `EOReset`, `EORestartLevel` |
 
 ## Technical decisions — interfaces established
 

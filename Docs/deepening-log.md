@@ -185,18 +185,74 @@ The mission state machine was chosen first because it needs nothing but a world:
 no map, no actors, no pawns. `FScopedTestWorld` builds and tears one down, which
 is the pattern the rest of the module-level checks can follow.
 
-- **[autonomous]** The tests sit in the existing module under
-  `#if WITH_AUTOMATION_TESTS` rather than in a separate one. The grilling chose a
-  separate module excluded from the Game target, and that is still right for
-  `UEOSelfTest` and `UEOCheatManager` - but it cannot be done by moving files
-  alone: `AEOPlayerController` constructs the self-test and sets `CheatClass`, so
-  a runtime module would depend on a developer module, which is backwards.
-  Inverting that needs a registration hook, and is its own job. `WITH_AUTOMATION_TESTS`
-  is 0 in shipping, so the new tests do not ship either way.
+- **[autonomous]** The automation tests sit in the existing module under
+  `#if WITH_AUTOMATION_TESTS`, which is 0 in shipping, so they do not ship either
+  way. The harness itself moved out - see below.
 
-**Not done:** converting the 143 existing checks, converting the two suites to
-`AFunctionalTest`, and moving the self-test and cheat manager out of the shipping
-module.
+**Correction to an earlier entry in this log.** I recorded that moving
+`UEOSelfTest` and `UEOCheatManager` out of the game module was blocked, because
+`AEOPlayerController` constructs the self-test and names a `CheatClass`, so a
+runtime module would end up depending on a developer one. That was wrong. I had
+not looked for the engine's own hooks, and there are two:
+
+- `UCheatManager::RegisterForOnCheatManagerCreated` hands every cheat manager the
+  engine creates to whoever registered, so cheats arrive as a
+  `UCheatManagerExtension` and the controller names no `CheatClass` at all.
+- `FGameModeEvents::OnGameModePostLoginEvent` fires with the new player
+  controller, so the self-test starts itself instead of being constructed in
+  `BeginPlay`.
+
+**Done: `ExecutiveOpsDev`.** A `DeveloperTool` module holding the self-test and
+the cheats. The dependency runs one way - it knows about the game, the game knows
+nothing about it - and four hooks came out of `AEOPlayerController`.
+
+Verified per configuration by what actually got compiled: excluded from Shipping,
+present in Development Game and in the editor. So the harness stops shipping
+without losing the ability to run it from a packaged development build.
+
+**The ground suite failed on the first run after this change**, on three checks,
+all of them the operative's shot doing no damage. A re-run passed 127/127
+untouched, so it was intermittent rather than a break.
+
+I attributed it to the gun check's old flake, the one `aa46a31` spent three
+attempts diagnosing - and that attribution is weaker than it looked at the time.
+A second agent was working in the same tree on the M9 animation pass, and every
+build I ran compiled its in-flight changes: an Animation Blueprint taking over
+the operative's pose, and `PlayAnimation` calls newly gated on single-node mode.
+That is the same area, so the failure could have come from either. The re-run
+passing shows only that it is not deterministic.
+
+The spread fix below stands on its own merits regardless of which caused that
+particular run. Hip spread is 4.5 degrees and the cone is centred on the aim line, so
+a crosshair dead on the guard still misses some of the time. That is correct for
+the weapon and useless in a check asking whether damage reaches the guard at all.
+Moving the harness changed which engine event starts it, which shifted world
+timing, which rolled the dice differently.
+
+**[autonomous] Fixed rather than accepted.** The check now zeroes the weapon's
+spread for the shot and restores it afterwards, so it measures the damage path
+instead of sampling a cone. This is only possible because the weapon now has an
+interface to ask - before C2b there was nothing to set. The cone itself is still
+asserted, deterministically and separately, by the automation test.
+
+This is the concrete case for the whole candidate: a check that took three
+commits to diagnose, could not be made reliable while the weapon lived inside a
+1,324-line character, and became a two-line fix once it had a seam.
+
+**The runner could not run while anyone had the project open.** It scraped the
+editor's default `Saved/Logs/ExecutiveOps.log` and deleted it before each suite,
+so an open editor - or a headless one from a previous iteration that had not
+fully exited - held the file and the run died on the delete. That bit twice: once
+as three of five loop iterations reporting no verdict at all, and once as the
+whole suite refusing to start.
+
+Each suite now writes its own log via `-abslog`, so the runner is independent of
+whatever else has the project open. Treating a missing verdict as "did not
+measure" rather than as a pass was already right, and is what surfaced this
+rather than hiding it.
+
+**Not done:** converting the 143 existing checks, and converting the two suites
+to `AFunctionalTest`.
 
 ## What was not implemented
 
@@ -211,10 +267,10 @@ replacing `EOHudScreenComponent`'s render-target trick with a
 worse than either end state, and the gather seam is only worth building once the
 widgets that consume it exist.
 
-**C4 - the rest.** Converting the 143 existing checks, turning the two suites
-into `AFunctionalTest`s, and moving `UEOSelfTest` and `UEOCheatManager` out of the
-shipping module. The last of those is blocked on a dependency inversion, noted
-above.
+**C4 - the rest.** Converting the 143 existing checks and turning the two suites
+into `AFunctionalTest`s. The module split is done; what remains is the checks
+themselves, which is mechanical but large, and best done a cluster at a time
+behind the interfaces this pass created.
 
 **C7 - the guard's AI.** Untouched. Perception, StateTree, AIController and
 navmesh together are a rewrite of the one system whose current shape is

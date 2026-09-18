@@ -12,6 +12,14 @@
 				"Engine",
 				"EnhancedInput"
 			]
+		},
+		{
+			"Name": "ExecutiveOpsDev",
+			"Type": "DeveloperTool",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine"
+			]
 		}
 	],
 	"Plugins": [

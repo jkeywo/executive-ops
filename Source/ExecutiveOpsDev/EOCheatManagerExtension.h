@@ -2,14 +2,19 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/CheatManager.h"
-#include "EOCheatManager.generated.h"
+#include "EOCheatManagerExtension.generated.h"
 
 /**
- * Console commands for driving the loop by hand while the real triggers do not exist yet.
- * Available in non-shipping builds via the ` console.
+ * Console commands for driving the loop by hand while the real triggers do not
+ * exist yet. Available via the ` console.
+ *
+ * An extension rather than a UCheatManager subclass, so the player controller
+ * does not have to name it as its CheatClass - the engine hands every cheat
+ * manager it creates to whoever registered for them, and this module registers
+ * on startup. That is what lets the cheats live outside the game module.
  */
 UCLASS()
-class EXECUTIVEOPS_API UEOCheatManager : public UCheatManager
+class EXECUTIVEOPSDEV_API UEOCheatManagerExtension : public UCheatManagerExtension
 {
 	GENERATED_BODY()
 

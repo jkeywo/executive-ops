@@ -9,8 +9,6 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EngineUtils.h"
 #include "ExecutiveOps.h"
-#include "Debug/EOCheatManager.h"
-#include "Debug/EOSelfTest.h"
 #include "Input/EOInputConfig.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Interfaces/EODeployableInterface.h"
@@ -25,7 +23,6 @@ AEOPlayerController::AEOPlayerController()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	CheatClass = UEOCheatManager::StaticClass();
 	AircraftClass = AEOAircraftPawn::StaticClass();
 	OperativeClass = AEOOperativeCharacter::StaticClass();
 }
@@ -90,12 +87,6 @@ void AEOPlayerController::BeginPlay()
 			ShotTimer, this, &AEOPlayerController::TakeDebugScreenshot, Delay, false);
 	}
 
-	if (UEOSelfTest::IsRequested())
-	{
-		// Deferred a tick: the transitions need a fully possessed pawn.
-		FTimerHandle Handle;
-		GetWorldTimerManager().SetTimer(Handle, this, &AEOPlayerController::RunSelfTest, 0.5f, false);
-	}
 }
 
 void AEOPlayerController::TakeDebugScreenshot()
@@ -244,12 +235,6 @@ void AEOPlayerController::RearmMission()
 	UE_LOG(LogExecutiveOps, Log, TEXT("Mission re-armed; ready for another run."));
 }
 
-void AEOPlayerController::RunSelfTest()
-{
-	// The test object owns its own phase timer and reports its own result.
-	SelfTest = NewObject<UEOSelfTest>(this, TEXT("EOSelfTest"));
-	SelfTest->Start(this);
-}
 
 AEOAircraftPawn* AEOPlayerController::ResolveAircraft()
 {

@@ -8,7 +8,6 @@
 class AEOAircraftPawn;
 class AEOOperativeCharacter;
 class UEOInputConfig;
-class UEOSelfTest;
 class AEOMissionSite;
 class AEOExtractionZone;
 
@@ -159,9 +158,6 @@ protected:
 	/** Stop an inbound arrival and hand the craft back to the player. */
 	void CancelExtraction();
 
-	/** Entry point for the -EOSelfTest command-line switch. */
-	void RunSelfTest();
-
 	/**
 	 * Grabs a screenshot a few seconds after boot and exits.
 	 *
@@ -226,9 +222,6 @@ protected:
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<UEOInputConfig> InputConfig;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UEOSelfTest> SelfTest;
 
 	FTimerHandle RearmTimer;
 

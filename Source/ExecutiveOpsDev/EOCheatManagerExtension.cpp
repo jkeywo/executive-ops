@@ -1,7 +1,8 @@
-#include "Debug/EOCheatManager.h"
+#include "EOCheatManagerExtension.h"
+
+#include "ExecutiveOpsDev.h"
 
 #include "Core/EOPlayerController.h"
-#include "ExecutiveOps.h"
 #include "Kismet/GameplayStatics.h"
 #include "Mission/EOMissionSubsystem.h"
 #include "UI/EODebugHUD.h"
@@ -10,15 +11,15 @@
 #include "Mission/EOMissionSite.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 
-void UEOCheatManager::EOReset()
+void UEOCheatManagerExtension::EOReset()
 {
-	if (AEOPlayerController* PC = Cast<AEOPlayerController>(GetOuterAPlayerController()))
+	if (AEOPlayerController* PC = Cast<AEOPlayerController>(GetPlayerController()))
 	{
 		PC->EOReset();
 	}
 }
 
-void UEOCheatManager::EORestartLevel()
+void UEOCheatManagerExtension::EORestartLevel()
 {
 	if (UWorld* World = GetWorld())
 	{
@@ -26,25 +27,25 @@ void UEOCheatManager::EORestartLevel()
 	}
 }
 
-void UEOCheatManager::EOPossessAircraft()
+void UEOCheatManagerExtension::EOPossessAircraft()
 {
-	if (AEOPlayerController* PC = Cast<AEOPlayerController>(GetOuterAPlayerController()))
+	if (AEOPlayerController* PC = Cast<AEOPlayerController>(GetPlayerController()))
 	{
 		PC->PossessAircraft();
 	}
 }
 
-void UEOCheatManager::EOPossessOperative()
+void UEOCheatManagerExtension::EOPossessOperative()
 {
-	if (AEOPlayerController* PC = Cast<AEOPlayerController>(GetOuterAPlayerController()))
+	if (AEOPlayerController* PC = Cast<AEOPlayerController>(GetPlayerController()))
 	{
 		PC->PossessOperative();
 	}
 }
 
-void UEOCheatManager::EODeploy()
+void UEOCheatManagerExtension::EODeploy()
 {
-	AEOPlayerController* PC = Cast<AEOPlayerController>(GetOuterAPlayerController());
+	AEOPlayerController* PC = Cast<AEOPlayerController>(GetPlayerController());
 	if (!PC)
 	{
 		return;
@@ -61,24 +62,24 @@ void UEOCheatManager::EODeploy()
 
 	if (!PC->RequestDeployment())
 	{
-		UE_LOG(LogExecutiveOps, Warning, TEXT("EODeploy failed."));
+		UE_LOG(LogExecutiveOpsDev, Warning, TEXT("EODeploy failed."));
 	}
 }
 
-void UEOCheatManager::EOExtract()
+void UEOCheatManagerExtension::EOExtract()
 {
-	if (AEOPlayerController* PC = Cast<AEOPlayerController>(GetOuterAPlayerController()))
+	if (AEOPlayerController* PC = Cast<AEOPlayerController>(GetPlayerController()))
 	{
 		if (!PC->RequestExtraction())
 		{
-			UE_LOG(LogExecutiveOps, Warning, TEXT("EOExtract failed."));
+			UE_LOG(LogExecutiveOpsDev, Warning, TEXT("EOExtract failed."));
 		}
 	}
 }
 
-void UEOCheatManager::EOToggleDebugHUD()
+void UEOCheatManagerExtension::EOToggleDebugHUD()
 {
-	if (const APlayerController* PC = GetOuterAPlayerController())
+	if (const APlayerController* PC = GetPlayerController())
 	{
 		if (AEODebugHUD* HUD = Cast<AEODebugHUD>(PC->GetHUD()))
 		{
@@ -87,9 +88,9 @@ void UEOCheatManager::EOToggleDebugHUD()
 	}
 }
 
-void UEOCheatManager::EOToggleHUD()
+void UEOCheatManagerExtension::EOToggleHUD()
 {
-	if (const APlayerController* PC = GetOuterAPlayerController())
+	if (const APlayerController* PC = GetPlayerController())
 	{
 		if (AEOPlayerHUD* HUD = Cast<AEOPlayerHUD>(PC->GetHUD()))
 		{
@@ -98,9 +99,9 @@ void UEOCheatManager::EOToggleHUD()
 	}
 }
 
-void UEOCheatManager::EOToggleMap()
+void UEOCheatManagerExtension::EOToggleMap()
 {
-	if (const APlayerController* PC = GetOuterAPlayerController())
+	if (const APlayerController* PC = GetPlayerController())
 	{
 		if (AEONavigationHUD* HUD = Cast<AEONavigationHUD>(PC->GetHUD()))
 		{
@@ -109,7 +110,7 @@ void UEOCheatManager::EOToggleMap()
 	}
 }
 
-void UEOCheatManager::EOSelectMission()
+void UEOCheatManagerExtension::EOSelectMission()
 {
 	UWorld* World = GetWorld();
 	UEOMissionSubsystem* Mission = World ? World->GetSubsystem<UEOMissionSubsystem>() : nullptr;
@@ -121,20 +122,20 @@ void UEOCheatManager::EOSelectMission()
 	const AEOMissionSite* Site = Mission->SelectDefaultSite();
 	if (!Site)
 	{
-		UE_LOG(LogExecutiveOps, Warning, TEXT("EOSelectMission: no mission site in this level."));
+		UE_LOG(LogExecutiveOpsDev, Warning, TEXT("EOSelectMission: no mission site in this level."));
 		return;
 	}
 
 	Mission->StartMission();
 }
 
-void UEOCheatManager::EOMissionState()
+void UEOCheatManagerExtension::EOMissionState()
 {
 	if (const UWorld* World = GetWorld())
 	{
 		if (const UEOMissionSubsystem* Mission = World->GetSubsystem<UEOMissionSubsystem>())
 		{
-			UE_LOG(LogExecutiveOps, Log, TEXT("Mission state: %s"), *Mission->GetMissionStateName());
+			UE_LOG(LogExecutiveOpsDev, Log, TEXT("Mission state: %s"), *Mission->GetMissionStateName());
 		}
 	}
 }
