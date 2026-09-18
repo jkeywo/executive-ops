@@ -231,6 +231,35 @@ def build_blend_space():
     return blend_space
 
 
+AIM_BS = "/Game/Animation/BS_AimStrafe"
+AIM_WEIGHT_INTERP = 6.0
+
+
+def tune_aim_blend_space():
+    """
+    Smooth the hand-authored aim strafe blend space.
+
+    Its Direction axis flips from -90 to +90 the instant A becomes D, and the
+    Open World Animset pistol strafes carry no sync markers, so with no
+    smoothing the pose cuts from the left strafe to the right strafe at
+    whatever frame it was on: the blink on a strafe reversal. Target weight
+    interpolation eases the sample weights instead of the input, which keeps
+    the ±180 wrap on the axis intact and is the engine's own answer to this.
+    Samples and axes are left as authored.
+    """
+    blend_space = EAL.load_asset(AIM_BS) if EAL.does_asset_exist(AIM_BS) else None
+    if not blend_space:
+        log("no {} yet; skipping aim smoothing".format(AIM_BS))
+        return
+
+    if blend_space.get_editor_property("target_weight_interpolation_speed_per_sec") == AIM_WEIGHT_INTERP:
+        return
+
+    blend_space.set_editor_property("target_weight_interpolation_speed_per_sec", AIM_WEIGHT_INTERP)
+    EAL.save_loaded_asset(blend_space)
+    log("aim blend space: target weight interpolation {}/s".format(AIM_WEIGHT_INTERP))
+
+
 def build_anim_blueprint(blend_space):
     """
     The project's own copy of the pack's locomotion graph, repointed at the
@@ -263,18 +292,28 @@ def build_anim_blueprint(blend_space):
     parent = unreal.BlueprintEditorLibrary.get_blueprint_parent_class(abp)
     # Compared by name: the class objects are distinct wrappers, and comparing
     # them reparents on every run, which is harmless but reads as a change.
-    if parent is None or parent.get_name() != native.get_name():
+    if parent is None or parent.get_name() != native.static_class().get_name():
         unreal.BlueprintEditorLibrary.reparent_blueprint(abp, native)
         log("graph reparented to UEOOperativeAnimInstance")
 
-    # Blend space players first: there is only one in the pack's graph, driving
-    # the ground locomotion state.
+    # Blend space players next. The pack's graph has one, driving the ground
+    # locomotion state, and it is repointed at the project's copy. Any player
+    # already aimed at something else - the hand-built Aim state's BS_AimStrafe -
+    # is somebody's authored work and is left alone.
+    pack_blend_space = EAL.load_asset(PACK + "/InPlace/WalkJogRun")
+    repointed = 0
     for node in abp.get_nodes_of_class(unreal.AnimGraphNode_BlendSpacePlayer):
         inner = node.get_editor_property("node")
+        current = inner.get_editor_property("blend_space")
+        if current is not None and current != pack_blend_space and current != blend_space:
+            continue
+        if current == blend_space:
+            continue
         inner.set_editor_property("blend_space", blend_space)
         node.set_editor_property("node", inner)
+        repointed += 1
 
-    log("blend space player repointed to " + BS_DEST)
+    log("{} blend space player(s) repointed to {}".format(repointed, BS_DEST))
 
     if USE_ROOT_MOTION:
         swapped = 0
@@ -354,6 +393,7 @@ def main():
         clean_previous()
 
     blend_space = build_blend_space()
+    tune_aim_blend_space()
     abp = build_anim_blueprint(blend_space)
     report_graph(abp)
     wire_to_operative(abp)

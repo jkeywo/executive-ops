@@ -234,9 +234,20 @@ In the **Event Graph**:
    | `Speed When Stopping` | `Stopping Speed` |
    | `Speed Required for Leap` | `Leap Speed Threshold` |
 
-   If `Is Accelerating` and `Is Moving` were also on the deleted cast path, set
-   them from `Accelerating` and `Moving` the same way.
+   And two more, which are **not optional**: every way out of `Idle` and into
+   `StartMoving` / `WalkJogRun` is gated on them, so with these unset the
+   operative feeds `Speed` correctly and still never leaves the idle pose.
+
+   | SET | ← Get |
+   |---|---|
+   | `Is Moving` | `Moving` |
+   | `Is Accelerating` | `Accelerating` |
+
 3. Compile. No transition rule should need touching.
+
+Checked live: with `Speed` wired and these two missing, the graph reads
+`Speed=500 IsMoving=F IsAccelerating=F` while running and sits in
+`Idle/Movement = Idle`.
 
 ### B. Jump becomes a dive only after falling far enough
 
@@ -269,6 +280,12 @@ You author the blend space; the graph then gets one state.
 
    Put all nine loops in one sync group so the feet stay in phase across
    directions.
+
+   The pistol strafes carry no sync markers, and Direction flips from −90 to
+   +90 the instant A becomes D, so an unsmoothed blend space cuts between the
+   two clips mid-stride: a blink on every reversal. The prepare script sets the
+   asset's **Target Weight Interpolation Speed** to 6/s, which eases the sample
+   weights rather than the axis and keeps the ±180 wrap intact. Leave it set.
 3. In the `Idle/Movement` state machine add a state **`Aim`** playing
    `BS_AimStrafe`, with **Direction** ← Get `Move Direction` and **Speed** ←
    Get `Ground Speed`.
