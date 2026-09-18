@@ -81,6 +81,17 @@ public:
 	TObjectPtr<class UEOHudStateGatherer> Gatherer;
 
 	/**
+	 * Every frame's values, for anything that shows the interface.
+	 *
+	 * The viewport widget and the cockpit panel both copy from the same view
+	 * model; this is how the panel gets it without the HUD knowing a panel
+	 * exists. Broadcast whether or not a viewport widget is live, since the
+	 * panel wants the values either way.
+	 */
+	DECLARE_MULTICAST_DELEGATE_OneParam(FEOHudViewModelBuilt, const struct FEOHudViewModel&);
+	FEOHudViewModelBuilt OnViewModelBuilt;
+
+	/**
 	 * The viewport widget, when one is assigned in the HUD settings.
 	 *
 	 * While it exists the Canvas slots stand down and the widget draws instead,

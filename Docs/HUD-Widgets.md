@@ -103,7 +103,17 @@ thing.
 ## The cockpit panel
 
 The in-world panel is the second adapter over the same view model, and the
-reason for building the seam. It takes its own **Panel Widget** class in the
-same settings page - usually `WBP_HUD` again, or a variant arranged for the
-canopy's aspect. Wiring it to a `UWidgetComponent` on the aircraft is the next
-step once the viewport widget is in; it is not needed to author the viewport.
+reason for building the seam. It is a `UWidgetComponent` in Cylinder mode on
+the aircraft - the engine drawing a widget onto a curved surface, which is what
+the old procedural-mesh panel built by hand - and it receives every frame's
+view model from the HUD exactly as the viewport widget does.
+
+Assign it in the same place: **Project Settings → Game → Executive Ops - HUD →
+Panel Widget**. Usually `WBP_HUD` again, since the two bind to the same values;
+a separate Blueprint is for when the canopy wants a different arrangement of
+them. The panel is 84 degrees of arc at 1920×1080, so a layout authored for the
+viewport carries across.
+
+Until a Panel Widget is assigned the old panel keeps drawing the Canvas readouts
+onto the glass. Assigning one is the switch: the widget panel shows in first
+person and the old one stands down.

@@ -69,6 +69,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera")
 	bool IsFirstPerson() const { return bFirstPerson; }
 
+	/**
+	 * True while a HUD panel is showing on the cockpit glass - whichever of the
+	 * two is live. What the flight suite asserts on when it toggles the view,
+	 * since the panels themselves are the pawn's business.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Aircraft|Cockpit")
+	bool IsCockpitPanelShowing() const;
+
+	/** True once the widget panel has a widget and has taken over from the old one. */
+	UFUNCTION(BlueprintPure, Category = "Aircraft|Cockpit")
+	bool IsWidgetPanelLive() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void SetFirstPerson(bool bNewFirstPerson);
 
@@ -183,6 +195,15 @@ protected:
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<class UEOHudScreenComponent> HudScreen;
+
+	/**
+	 * The HUD on the cockpit glass, as a widget on a curved surface, driven by
+	 * the same view model as the viewport. Takes over from HudScreen the moment
+	 * a Panel Widget class is assigned in the HUD settings; until then it has no
+	 * widget and the old panel keeps drawing.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Aircraft|Cockpit")
+	TObjectPtr<class UEOHudPanelComponent> HudPanel;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Audio")
 	TObjectPtr<UAudioComponent> EngineAudio;

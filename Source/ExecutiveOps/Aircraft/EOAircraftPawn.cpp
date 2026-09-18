@@ -15,6 +15,7 @@
 #include "Input/EOInputConfig.h"
 #include "Input/EOInputSettings.h"
 #include "UI/EODebugHUD.h"
+#include "UI/EOHudPanelComponent.h"
 #include "UI/EOHudScreenComponent.h"
 #include "UI/EONavigationHUD.h"
 
@@ -104,6 +105,9 @@ AEOAircraftPawn::AEOAircraftPawn()
 	HudScreen = CreateDefaultSubobject<UEOHudScreenComponent>(TEXT("HudScreen"));
 	HudScreen->SetupAttachment(CockpitPivot);
 
+	HudPanel = CreateDefaultSubobject<UEOHudPanelComponent>(TEXT("HudPanel"));
+	HudPanel->SetupAttachment(CockpitPivot);
+
 	CockpitCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("CockpitCamera"));
 	CockpitCamera->SetupAttachment(CockpitPivot);
 	CockpitCamera->bUsePawnControlRotation = false;
@@ -154,36 +158,59 @@ void AEOAircraftPawn::ToggleView()
 	SetFirstPerson(!bFirstPerson);
 }
 
+bool AEOAircraftPawn::IsWidgetPanelLive() const
+{
+	return HudPanel && HudPanel->IsLive();
+}
+
+bool AEOAircraftPawn::IsCockpitPanelShowing() const
+{
+	const USceneComponent* Showing = IsWidgetPanelLive()
+		? static_cast<const USceneComponent*>(HudPanel)
+		: static_cast<const USceneComponent*>(HudScreen);
+	return Showing && Showing->IsVisible();
+}
+
 void AEOAircraftPawn::ApplyViewMode()
 {
 	// The panel only exists in the cockpit; in chase view the HUD goes back to
 	// being drawn flat over the screen, because there is no glass to put it on.
+	// Two panels exist while the interface is being moved onto widgets, and one
+	// draws. The widget panel takes over the moment it has a widget; until then
+	// the old one keeps the Canvas readouts on the glass.
+	const bool bWidgetPanel = HudPanel && HudPanel->IsLive();
+
+	// Sit the arc's centre exactly on the eye, so the curve is equidistant all
+	// the way across and the readouts do not stretch toward the edges. Read off
+	// the camera rather than hardcoded, because where the seat is depends on
+	// which cockpit model has been imported - at the pivot origin the panel sat
+	// most of a metre below the pilot's eyeline, behind the dashboard.
+	//
+	// Both stay parented to CockpitPivot, not the camera: that is what makes
+	// looking around pan the view across a fixed display.
+	const FVector Eye = CockpitCamera ? CockpitCamera->GetRelativeLocation() : FVector::ZeroVector;
+
+	if (HudPanel)
+	{
+		HudPanel->SetRelativeLocation(Eye);
+		HudPanel->SetVisibility(bFirstPerson && bWidgetPanel);
+	}
+
 	if (HudScreen)
 	{
-		// Sit the arc's centre exactly on the eye, so the curve is equidistant all
-		// the way across and the readouts do not stretch toward the edges. Read off
-		// the camera rather than hardcoded, because where the seat is depends on
-		// which cockpit model has been imported - at the pivot origin the panel
-		// sat most of a metre below the pilot's eyeline, behind the dashboard.
-		//
-		// It stays parented to CockpitPivot, not the camera: that is what makes
-		// looking around pan the view across a fixed display.
-		if (CockpitCamera)
-		{
-			HudScreen->SetRelativeLocation(CockpitCamera->GetRelativeLocation());
-		}
-
-		HudScreen->SetVisibility(bFirstPerson);
+		HudScreen->SetRelativeLocation(Eye);
+		HudScreen->SetVisibility(bFirstPerson && !bWidgetPanel);
 	}
 
 	// Two casts, both of which can fail: an unpossessed or AI-flown aircraft has
 	// no player controller, and chaining through one crashed the flight suite the
-	// moment the parked VTOL applied its view mode.
+	// moment the parked VTOL applied its view mode. The Canvas chain is only
+	// redirected into the old panel while that is the one showing.
 	if (APlayerController* OwningController = Cast<APlayerController>(GetController()))
 	{
 		if (AEODebugHUD* Hud = Cast<AEODebugHUD>(OwningController->GetHUD()))
 		{
-			Hud->SetProjectionScreen(bFirstPerson ? HudScreen : nullptr);
+			Hud->SetProjectionScreen((bFirstPerson && !bWidgetPanel) ? HudScreen : nullptr);
 		}
 	}
 

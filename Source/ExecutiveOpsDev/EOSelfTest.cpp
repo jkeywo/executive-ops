@@ -354,6 +354,19 @@ void UEOSelfTest::Step()
 			IEOAircraftControlInterface::Execute_ResetFlightState(Plane);
 			Check(FMath::IsNearlyZero(IEOAircraftControlInterface::Execute_GetCurrentSpeed(Plane)),
 				TEXT("reset clears velocity"));
+
+			// The cockpit panel follows the view. Possession already lands in first
+			// person, so the switch is the part nothing else here exercised: chase
+			// takes the panel off the glass and coming back puts it there again.
+			// Whichever of the two panels is live is the pawn's own affair.
+			Check(Plane->IsFirstPerson(), TEXT("the craft is possessed in first person"));
+			Check(Plane->IsCockpitPanelShowing(), TEXT("and the cockpit panel is showing"));
+
+			Plane->SetFirstPerson(false);
+			Check(!Plane->IsCockpitPanelShowing(), TEXT("chase view takes the panel off the glass"));
+
+			Plane->SetFirstPerson(true);
+			Check(Plane->IsCockpitPanelShowing(), TEXT("first person puts it back"));
 		}
 		UE_LOG(LogExecutiveOpsDev, Display, TEXT("[SelfTest] -- M2: navigation --"));
 		Advance(EPhase::MissionSelect, 0.f);

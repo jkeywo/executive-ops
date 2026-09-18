@@ -313,9 +313,37 @@ Three modules, in a line:
 Verified with no widget class assigned: 9/9 automation, 55/55 flight, 127/127
 ground - so the wiring changes nothing until a Blueprint is pointed at it.
 
-**Still to do:** the author's layout in `WBP_HUD`; then stripping the Canvas
-slots; then the cockpit panel as a `UWidgetComponent` driven by the same view
-model, which is the second adapter and the reason for the seam.
+**The cockpit panel is a `UWidgetComponent`.** `UEOHudPanelComponent`, in
+Cylinder mode, on the aircraft beside the old panel. The engine draws a widget
+onto a curved surface; the procedural mesh and render-target trick it replaces
+was reimplementing that, and redirecting the entire Canvas draw chain into it
+to get the readouts across.
+
+- **[autonomous]** The panel subscribes to the HUD rather than the HUD knowing
+  about panels. `AEOPlayerHUD` broadcasts each frame's view model; the panel
+  listens and applies it to its widget. Nothing about the aircraft or first
+  person lives in the HUD, which is the direction the dependency should run,
+  and it is what makes this the second adapter over one source rather than a
+  second source.
+- **[autonomous]** It binds through the owning pawn's controller, retried from
+  its tick until the HUD exists, so an aircraft nobody is flying binds to
+  nothing. That avoids the `GetFirstPlayerController` shortcut the review
+  flagged elsewhere.
+- Both panels exist while the interface is being moved. The widget panel takes
+  over the moment it has a widget - the Panel Widget class in the HUD settings -
+  and the old one stands down, including the Canvas redirection. Until then the
+  old panel keeps drawing. Same arrangement as everything else in this pass.
+
+The suites never toggled the cockpit view - possession lands in first person,
+so the default panel path was covered and the switch was not, which is exactly
+the code this changes. Four checks now sit at the end of `HoverSpeedClamp`:
+possessed in first person with the panel showing, chase takes it off the glass,
+first person puts it back. Verified: 9/9 automation, 59/59 flight, 127/127
+ground, with no Panel Widget assigned so the old panel is the one exercised.
+
+**Still to do:** the author's layout in `WBP_HUD` and assigning it as both the
+viewport and panel widget; then stripping the Canvas slots, `EOHudScreenComponent`
+and `AEODebugHUD::DrawInto`, which only exist to feed the old panel.
 
 **C4 - the rest.** Converting the 143 existing checks and turning the two suites
 into `AFunctionalTest`s. The module split is done; what remains is the checks

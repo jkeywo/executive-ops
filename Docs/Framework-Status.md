@@ -29,12 +29,12 @@ subsystem through its interface and tear it down, in about a second. See
 `Docs/adr/0007`.
 
 Two suites, because the flight sequence and the ground arena live in different
-maps. 174 checks total, stable across repeated runs.
+maps. 186 checks total, stable across repeated runs.
 
 | Suite | Map | Checks | Covers |
 |---|---|---|---|
-| flight | `L_FlightTest` | 52 | boot, flight model, navigation, the approach, deployment, handover |
-| ground | `L_MissionTest` | 122 | traversal, slide, the guard encounter, the mission run twice, extraction |
+| flight | `L_FlightTest` | 59 | boot, flight model, navigation, the approach, deployment, handover |
+| ground | `L_MissionTest` | 127 | traversal, slide, the guard encounter, the mission run twice, extraction |
 
 The suites drive the game through its public interfaces and assert on real
 outcomes: the aircraft flies its own 268m approach, the operative rides the drop

@@ -111,12 +111,17 @@ void AEOPlayerHUD::DrawHUD()
 		return;
 	}
 
+	// Built once, whoever is showing it. The cockpit panel listens for this
+	// whether or not there is a viewport widget yet.
+	const FEOHudViewModel ViewModel = FEOHudViewModel::Build(State);
+	OnViewModelBuilt.Broadcast(ViewModel);
+
 	// A live widget is the interface. The Canvas slots stand down rather than
 	// drawing underneath it; the screen feedback stays, because it is hiding a
 	// cut and a widget is not the thing to trust with that.
 	if (Widget)
 	{
-		Widget->Apply(FEOHudViewModel::Build(State));
+		Widget->Apply(ViewModel);
 		DrawScreenFeedback(Layout, State);
 		return;
 	}
