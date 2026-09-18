@@ -74,7 +74,10 @@ $packs = @(
     @{ Folder = "NW_MuzzleFX";           VaultDir = "NEONWEXF92be5882b5a1V1";  Purpose = "Muzzle flashes, shot bursts, shell and smoke" }
     @{ Folder = "Vefects";               VaultDir = "EasyImpa76514c37f081V1";  Purpose = "Comic impact frames for takedown" }
     @{ Folder = "NiagaraExamples";       VaultDir = "NiagaraExamplesPack";     Project = "HoldingProject"; Purpose = "Bullet impacts by material, sparks, tracers" }
-    @{ Folder = "Audio";                 Project = "LyraStarterGame";          Purpose = "Bullet whizz-bys, impacts, weapon and foley MetaSounds" }
+    # Exclude = subfolders dropped after the copy. Lyra's audio Blueprints cast to
+    # B_LyraGameInstance, LyraGameState and B_Weapon, none of which exist here,
+    # so they fail to compile on load. Nothing we use references them.
+    @{ Folder = "Audio";                 Project = "LyraStarterGame";          Purpose = "Bullet whizz-bys, impacts, weapon and foley MetaSounds"; Exclude = @("Blueprints") }
 )
 
 function Resolve-PackSource($pack) {
@@ -139,6 +142,15 @@ foreach ($pack in $selected) {
 
     Write-Host "copying $($pack.Folder) ..."
     Copy-Item -Path $source -Destination $target -Recurse
+
+    foreach ($sub in $pack.Exclude) {
+        $dropped = Join-Path $target $sub
+        if (Test-Path $dropped) {
+            Remove-Item -Path $dropped -Recurse -Force
+            Write-Host "  dropped $($pack.Folder)\$sub"
+        }
+    }
+
     $imported++
 }
 
