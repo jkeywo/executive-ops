@@ -3,8 +3,6 @@
 #include "ExecutiveOpsDev.h"
 
 #include "Character/EOOperativeCharacter.h"
-#include "Combat/EOGuardCharacter.h"
-#include "Combat/EOHealthComponent.h"
 #include "Core/EOPlayerController.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Interfaces/EODeployableInterface.h"
@@ -20,36 +18,6 @@ AEOMissionLoopTest::AEOMissionLoopTest()
 {
 	// Two runs, each waiting up to thirty seconds for a real flight in.
 	TimeLimit = 100.f;
-}
-
-bool AEOMissionLoopTest::EnterGroundMission()
-{
-	UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>();
-	if (!Mission)
-	{
-		return false;
-	}
-
-	// Stands in for the flight and the drop, which the flight sequence covers.
-	Mission->ResetMission();
-	return Mission->StartMission()
-		&& Mission->BeginDeployment()
-		&& Mission->CompleteDeployment();
-}
-
-void AEOMissionLoopTest::ResetEncounter()
-{
-	if (AEOGuardCharacter* Guard = GetGuard())
-	{
-		Guard->ResetGuard();
-	}
-	if (AEOOperativeCharacter* Op = GetOperative())
-	{
-		if (UEOHealthComponent* Health = Op->GetHealth())
-		{
-			Health->Revive();
-		}
-	}
 }
 
 void AEOMissionLoopTest::Step()

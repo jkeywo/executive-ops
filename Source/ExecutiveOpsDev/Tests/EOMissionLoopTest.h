@@ -43,12 +43,6 @@ private:
 	EPhase Current() const { return static_cast<EPhase>(GetPhase()); }
 	void Go(EPhase Next, float Dwell) { Advance(static_cast<int32>(Next), Dwell); }
 
-	/** Drives the mission to OnGround, standing in for a completed insertion. */
-	bool EnterGroundMission();
-
-	/** Guard back to unaware and the operative back to full, so each run starts alike. */
-	void ResetEncounter();
-
 	FString Pass() const { return FString::Printf(TEXT("run %d:"), Attempt); }
 
 	int32 Attempt = 1;

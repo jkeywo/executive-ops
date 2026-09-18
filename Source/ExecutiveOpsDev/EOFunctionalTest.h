@@ -79,6 +79,16 @@ protected:
 	/** The aircraft wherever it is, possessed or parked. */
 	APawn* FindAircraftInLevel() const;
 
+	/**
+	 * Guard back to unaware and the operative back to full health. Every
+	 * ground sequence tests against the same encounter, so each starts from an
+	 * identical state rather than inheriting the last one's mess.
+	 */
+	void ResetEncounter() const;
+
+	/** Drives the mission to OnGround, standing in for a completed insertion. */
+	bool EnterGroundMission() const;
+
 	/** Seconds between steps. Fine enough that a dwell is honoured within a frame or two. */
 	static constexpr float StepInterval = 0.05f;
 

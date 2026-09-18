@@ -5,9 +5,11 @@
 #include "Aircraft/EOAircraftPawn.h"
 #include "Character/EOOperativeCharacter.h"
 #include "Combat/EOGuardCharacter.h"
+#include "Combat/EOHealthComponent.h"
 #include "Core/EOPlayerController.h"
 #include "Interfaces/EOAircraftControlInterface.h"
 #include "Mission/EOExtractionZone.h"
+#include "Mission/EOMissionSubsystem.h"
 #include "Mission/EOObjectiveTerminal.h"
 
 #include "Engine/World.h"
@@ -182,4 +184,36 @@ APawn* AEOFunctionalTest::FindAircraftInLevel() const
 		return *It;
 	}
 	return nullptr;
+}
+
+// ---- Shared setup ---------------------------------------------------------------
+
+void AEOFunctionalTest::ResetEncounter() const
+{
+	if (AEOGuardCharacter* Guard = GetGuard())
+	{
+		Guard->ResetGuard();
+	}
+	if (AEOOperativeCharacter* Op = GetOperative())
+	{
+		if (UEOHealthComponent* Health = Op->GetHealth())
+		{
+			Health->Revive();
+		}
+	}
+}
+
+bool AEOFunctionalTest::EnterGroundMission() const
+{
+	UEOMissionSubsystem* Mission = GetWorld()->GetSubsystem<UEOMissionSubsystem>();
+	if (!Mission)
+	{
+		return false;
+	}
+
+	// Stands in for the flight and the drop, which the flight sequence covers.
+	Mission->ResetMission();
+	return Mission->StartMission()
+		&& Mission->BeginDeployment()
+		&& Mission->CompleteDeployment();
 }

@@ -26,6 +26,7 @@ import eo_editor  # noqa: E402
 # (map, label, class name as the Python unreal module exposes it)
 TESTS = [
     ("/Game/Maps/L_MissionTest", "MissionLoop", "EOMissionLoopTest"),
+    ("/Game/Maps/L_MissionTest", "GuardEncounter", "EOGuardEncounterTest"),
 ]
 
 # Out of the way of the arena: nothing here needs to be anywhere in particular,
