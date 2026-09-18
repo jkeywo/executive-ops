@@ -348,19 +348,33 @@ bool AEOGuardCharacter::MoveToward(const FVector& TargetLocation, float DeltaSec
 	if (!FAISystem::IsValidLocation(MoveGoal)
 		|| FVector::DistSquared(MoveGoal, TargetLocation) > FMath::Square(MoveGoalTolerance))
 	{
-		MoveGoal = TargetLocation;
-
 		const EPathFollowingRequestResult::Type Result = AI->MoveToLocation(
 			TargetLocation, AcceptRadius, /*bStopOnOverlap=*/true, /*bUsePathfinding=*/true);
 
-		// A guard that cannot path stands still and says nothing, which reads as
-		// a broken encounter rather than a missing navmesh. Say it once.
-		if (Result == EPathFollowingRequestResult::Failed && !bWarnedPathFailure)
+		if (Result == EPathFollowingRequestResult::Failed)
 		{
-			bWarnedPathFailure = true;
-			UE_LOG(LogExecutiveOps, Warning,
-				TEXT("Guard %s could not path to %s - is there a navmesh over the arena?"),
-				*GetName(), *TargetLocation.ToString());
+			// Leave the goal unset so next tick asks again. The navmesh is built
+			// at runtime and rebuilt around anything that moves through it, so a
+			// request can land on a tile that is between versions; a guard that
+			// remembered that as its answer would stand on the spot for the rest
+			// of the leg.
+			PathFailureSeconds += DeltaSeconds;
+
+			// A guard that cannot path stands still and says nothing, which reads
+			// as a broken encounter rather than a missing navmesh. Say it once,
+			// and only once it has stopped being a transient.
+			if (PathFailureSeconds >= PathFailureWarnAfter && !bWarnedPathFailure)
+			{
+				bWarnedPathFailure = true;
+				UE_LOG(LogExecutiveOps, Warning,
+					TEXT("Guard %s could not path to %s for %.1fs - is there a navmesh over the arena?"),
+					*GetName(), *TargetLocation.ToString(), PathFailureSeconds);
+			}
+		}
+		else
+		{
+			MoveGoal = TargetLocation;
+			PathFailureSeconds = 0.f;
 		}
 	}
 

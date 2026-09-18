@@ -350,6 +350,64 @@ into `AFunctionalTest`s. The module split is done; what remains is the checks
 themselves, which is mechanical but large, and best done a cluster at a time
 behind the interfaces this pass created.
 
+*(in progress)* The container is `AEOFunctionalTest` in the dev module: an
+`AFunctionalTest` that keeps the self-test's idiom - fixed-cadence stepping, a
+dwell before a phase is sampled, `Check()` counted and logged in the same
+`[SelfTest]` format and forwarded to `AssertTrue` so the framework's report
+carries every assertion by name. A subclass declares its own phase enum and
+implements `Step()` as its own switch. `FunctionalTesting` is a runtime module,
+so the runner (`Project.Functional Tests`) needs no plugin.
+
+- **[autonomous]** First conversion is the mission loop
+  (`Tests/EOMissionLoopTest`): setup, objective, extraction with the aircraft
+  parked 12km out so the arrival is a real flight in, pickup, `EOReset`, and
+  the whole thing again - because a mission that only works once is not a loop.
+  Ported check for check from `MissionSetup..MissionSecondRun`. Chosen first
+  because it is the one the milestone is named for and it exercises the most
+  seams; the flight, deployment, traversal and guard clusters follow the same
+  pattern.
+- **[autonomous]** Tests are placed by `Scripts/place_functional_tests.py`,
+  idempotent by label like `add_navmesh.py`, rather than by hand in the editor:
+  a test actor with no transform that matters is exactly the kind of asset a
+  script should own, and a row in a table is easier to review than a map diff.
+- `UEOSelfTest` stays until each cluster has a green functional twin, then goes.
+
+**What the framework found on its first run.** All 45 checks passed and the
+test still failed, because the automation controller treats a `Warning` logged
+during a test as a failure (`bTreatLogWarningsAsTestErrors`, an engine default I
+kept). The warning was the guard's "could not path", and pulling on it found
+three things the self-test had been passing over:
+
+- The guard remembered a failed path request as its answer. `MoveGoal` was set
+  before the request, so a request that failed was never re-issued and the guard
+  stood on the spot for the rest of the leg. Now a failure leaves the goal unset
+  and the next tick asks again; the warning fires only after a second of
+  continuous failure, which is longer than a dynamic navmesh takes to rebuild a
+  tile.
+- **[autonomous]** The navmesh was only ever being built by accident. At
+  startup the engine rebuilds only navigation data it spawned itself to fill a
+  gap (`MarkRequiresInitialRebuild`, one call site); a `RecastNavMesh` loaded
+  from the map is trusted as saved, and the one `add_navmesh.py` had saved from
+  a commandlet had no tiles. The arena was navigable because the aircraft's
+  collision box, which had never been told otherwise, dirtied tiles under its
+  path as it flew, and the dirty-area rebuild filled them in. Opting the
+  aircraft out of navigation - a flying vehicle has no business shaping the
+  ground's navmesh, and characters already opt their capsules out - exposed it.
+  The maps now carry a bounds volume and no `RecastNavMesh`: `eo_editor.py`
+  strips one before any scripted save, and auto-create spawns and builds a
+  fresh one every launch, which is what the config comment had claimed all
+  along. `DefaultEngine.ini` says how. Building tiles in the editor and saving
+  them would be the other engine-shaped answer; it would need every map save
+  to come from an editor with a tick loop, which the scripts are not.
+- `LogStateTree: Error: The State Tree asset is not set` on every map load,
+  present in the old self-test logs too, unread because nothing failed on it.
+  The controller creates the brain component in C++ and hands it the tree in
+  OnPossess, but the component validated its own empty reference at
+  `InitializeComponent` first. It is now told not to start on its own.
+
+`AEOFunctionalTest::IsReady` also waits for the navmesh build to finish, since
+most sequences move something that paths.
+
 **C7 - the guard's AI.** *(perception and navigation in; the StateTree is not)*
 
 Confirmed by the author before starting, having seen `Docs/adr/0005` and the fact

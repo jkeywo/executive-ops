@@ -26,6 +26,12 @@ AEOAircraftPawn::AEOAircraftPawn()
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
 	CollisionBox->InitBoxExtent(FVector(400.f, 300.f, 120.f));
 	CollisionBox->SetCollisionProfileName(TEXT("Pawn"));
+	// The navmesh is generated at runtime and rebuilt around whatever moves
+	// through it. A 8m box flying over the arena would have every tile under
+	// its path regenerating, and the guard's path requests failing while they
+	// did. Characters opt their capsules out of this by default; a vehicle has
+	// to say so.
+	CollisionBox->SetCanEverAffectNavigation(false);
 	RootComponent = CollisionBox;
 
 	// The craft used to integrate its own position in Tick, twice - once for the

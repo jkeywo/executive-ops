@@ -271,6 +271,12 @@ private:
 	/** Where the current path was requested to. Invalid when not moving. */
 	FVector MoveGoal = FAISystem::InvalidLocation;
 
+	/** How long path requests have been failing back to back. Zeroed by a success. */
+	float PathFailureSeconds = 0.f;
+
+	/** Longer than a dynamic navmesh takes to rebuild a tile; shorter than a player waits. */
+	float PathFailureWarnAfter = 1.f;
+
 	/** So a missing navmesh is reported once rather than every frame. */
 	bool bWarnedPathFailure = false;
 

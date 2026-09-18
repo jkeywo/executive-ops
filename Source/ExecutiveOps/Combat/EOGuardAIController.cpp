@@ -31,6 +31,11 @@ AEOGuardAIController::AEOGuardAIController()
 		this, &AEOGuardAIController::HandlePerceptionUpdated);
 
 	Brain = CreateDefaultSubobject<UStateTreeAIComponent>(TEXT("Brain"));
+
+	// The tree is handed over in OnPossess, once the pawn is known. Left to
+	// itself the component would validate its own, empty, reference at
+	// InitializeComponent and log an error for a tree it was never going to run.
+	Brain->SetStartLogicAutomatically(false);
 }
 
 void AEOGuardAIController::OnPossess(APawn* InPawn)

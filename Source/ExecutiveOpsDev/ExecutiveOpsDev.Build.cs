@@ -22,7 +22,9 @@ public class ExecutiveOpsDev : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
-			"ExecutiveOps"
+			"ExecutiveOps",
+			"FunctionalTesting",
+			"NavigationSystem"
 		});
 
 		PublicIncludePaths.Add(ModuleDirectory);

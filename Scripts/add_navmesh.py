@@ -13,7 +13,13 @@ Run with the editor closed:
         -script="Scripts/add_navmesh.py"
 """
 
+import os
+import sys
+
 import unreal
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import eo_editor  # noqa: E402
 
 MAP = "/Game/Maps/L_MissionTest"
 VOLUME_LABEL = "NavMeshBounds"
@@ -63,7 +69,7 @@ def main():
         EXTENT.x / 100.0, EXTENT.y / 100.0, EXTENT.z / 100.0))
     volume.set_actor_location(unreal.Vector(0.0, 0.0, 0.0), False, False)
 
-    subsystem.save_current_level()
+    eo_editor.save_current_level(subsystem, actor_subsystem)
     log("saved {}".format(MAP))
 
 
