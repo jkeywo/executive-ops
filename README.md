@@ -88,7 +88,8 @@ automation framework; the runner exits non-zero on failure:
 | Tactical map | `M` | — |
 | Cockpit / chase view | `V` | — |
 | Vault / mantle / climb | — | `Space` (contextual) |
-| Slide | — | `Ctrl` or `C` while sprinting |
+| Slide | — | `Ctrl` while sprinting |
+| Crouch | — | `C` (toggle) |
 | Takedown | — | `F` (behind an unaware guard) |
 | Fire / Aim | — | `LMB` / `RMB` |
 | Interact | — | `E` (objective, extraction) |

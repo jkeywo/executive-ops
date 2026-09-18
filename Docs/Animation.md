@@ -96,8 +96,15 @@ not the other way round. Currently `WalkSpeed` is 500 (lands exactly on the jog
 sample) and `SprintSpeed` is **950**, exactly the run sample — at 850 a sprint
 sat 78% of the way from jog to run and never arrived.
 
-Nothing drives the character below 500, so the walk clip is never reached; a
-walk modifier or analogue input would open up the lower half of the space.
+The walk sample is reached on a stick and only on a stick. A key is either down
+or up, so a keyboard can only ever ask for the whole speed cap; a stick asks for
+a fraction of it, and the movement component scales the cap by how far it is
+pushed. `MinAnalogWalkSpeed` is set to `WalkPaceSpeed` (180), so the gentlest
+push lands on the walk sample rather than somewhere below anything that was
+captured, and a full push still reaches the jog.
+
+`CrouchSpeed` is 200, near the same sample, because the crouch set below is
+captured at a walking pace.
 
 ---
 
@@ -310,12 +317,68 @@ You author the blend space; the graph then gets one state.
 `MoveDirection` reads exactly as the blend space expects: 0 running toward the
 crosshair, ±90 strafing, 180 backpedalling.
 
+### D. Crouch, and crouch aim
+
+Same shape as C: one blend space, then states. Nothing new has to be fed in the
+event graph — `Is Crouched` is a C++ property on the parent anim instance, so
+transition rules can read it directly, the way `Is Aiming` already does.
+
+1. Create **`/Game/Animation/BS_CrouchStrafe`** — Blend Space, our skeleton
+   (`UE4_Mannequin_Skeleton` under OpenWorldAnimset). Horizontal axis
+   **Direction** −180..180, vertical axis **Speed** 0..200, matching
+   `CrouchSpeed`.
+2. Samples, all from `/Game/FightingAnimsetPro/Animations/InPlace/`. These are
+   the in-place copies, so unlike the pistol strafes they need no root lock:
+
+   | Direction | Speed | Clip |
+   |---|---|---|
+   | any | 0 | `KB_crouch_Idle` |
+   | 0 | 200 | `KB_crouch_WalkFwd` |
+   | 45 / −45 | 200 | `KB_crouch_WalkRight45` / `KB_crouch_WalkLeft45` |
+   | 90 / −90 | 200 | `KB_crouch_Sidestep_R` / `KB_crouch_Sidestep_L` |
+   | 135 / −135 | 200 | `KB_crouch_WalkRight135` / `KB_crouch_WalkLeft135` |
+   | 180 (and −180) | 200 | `KB_crouch_WalkBwd` |
+
+   One sync group across all nine, and set **Target Weight Interpolation
+   Speed** to 6/s for the same reason the aim space has it: Direction flips
+   sign the instant A becomes D.
+3. In the `Idle/Movement` state machine add a state **`Crouch`** playing
+   `BS_CrouchStrafe`, with **Direction** ← Get `Move Direction` and **Speed** ←
+   Get `Ground Speed`.
+4. Add a second state **`CrouchAim`**. The legs are the same, so it plays the
+   same blend space through a **Layered blend per bone**: `BS_CrouchStrafe` into
+   the base pose, `Pistol_aim_Idle` (from `/Game/OpenWorldAnimset/Animations/Pistol/`)
+   into the blend pose, branching at **`spine_01`** with mesh space rotation
+   blend on. That is the crouch-aim pose: crouched legs, weapon up.
+5. Transitions, all four off the existing states, blend ~0.2s:
+
+   | To | Rule |
+   |---|---|
+   | `CrouchAim` | `Is Crouched` AND `Is Aiming` |
+   | `Crouch` | `Is Crouched` AND NOT `Is Aiming` |
+   | `Aim` | `Is Aiming` AND NOT `Is Crouched` |
+   | back to `Idle/Movement` | NOT `Is Crouched` AND NOT `Is Aiming` |
+
+   Order matters: give the two crouch transitions the higher priority, or the
+   existing `Aim` rule wins and a crouched player stands up to aim. `Crouch` and
+   `CrouchAim` also need transitions between each other on `Is Aiming`, so
+   raising the weapon while already down does not drop out to standing first.
+6. Compile.
+
+The upper body is the honest compromise here. `KB_crouch_*` is an unarmed set,
+so the layered pistol pose is what makes it read as aiming. A proper crouched
+pistol set exists in Lyra (`MM_Pistol_Crouch_*`), on the UE5 skeleton, and Lyra
+ships the retargeter for it (`RTG_UE5Manny_UE4Manny`); that is the upgrade, and
+it costs a retarget plus an in-place bake per clip.
+
 ### Then
 
 Run `./Scripts/run_tests.ps1`, and check each with `ShowDebug ANIMATION`:
 sprint sits on the `Run_IP` sample; a jump plays `Jump_Fall_IP` and only a
 drop from the aircraft switches to `Leap_Fall_IP`; aiming shows the `Aim` state
-with `BS_AimStrafe` driving.
+with `BS_AimStrafe` driving; a gamepad stick held part way sits on the `Walk_IP`
+sample and pushed fully on `Jog_IP`; `C` shows `Crouch`, and aiming from there
+shows `CrouchAim` without passing through a standing state.
 
 ---
 

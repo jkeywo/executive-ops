@@ -49,7 +49,12 @@ AEOOperativeCharacter::AEOOperativeCharacter()
 	Movement->JumpZVelocity = 550.f;
 	Movement->AirControl = 0.35f;
 	Movement->BrakingDecelerationWalking = 2000.f;
-	Movement->MaxWalkSpeedCrouched = SlideImpulse;
+	Movement->MaxWalkSpeedCrouched = CrouchSpeed;
+
+	// A stick held part way asks for part of the speed cap, which is what lets a
+	// controller reach the walk clip at all. The floor keeps the gentlest push on
+	// the walk sample instead of somewhere below anything that was captured.
+	Movement->MinAnalogWalkSpeed = WalkPaceSpeed;
 
 	// Off by default, which silently makes Crouch() and the whole slide a no-op.
 	Movement->GetNavAgentPropertiesRef().bCanCrouch = true;
@@ -553,6 +558,14 @@ void AEOOperativeCharacter::UpdateFollowCamera(float DeltaSeconds)
 		return;
 	}
 
+	// The follow closes a veer. A heading further round than a right angle is a
+	// reversal - walking toward the camera, most of all - and chasing it swings
+	// the view through a half turn the player never asked for.
+	if (FMath::Abs(Delta) > CameraFollowMaxAngle)
+	{
+		return;
+	}
+
 	// Faster the quicker the operative is going: a walk should barely drag the
 	// camera round, a sprint should put it behind them promptly.
 	const float SpeedAlpha = FMath::Clamp(Speed / FMath::Max(SprintSpeed, 1.f), 0.f, 1.f);
@@ -621,7 +634,13 @@ void AEOOperativeCharacter::StopSlide()
 	bSliding = false;
 	SlideElapsed = 0.f;
 	SlideSpeed = 0.f;
-	UnCrouch();
+
+	// A slide run out by someone holding crouch leaves them crouched, not stood
+	// up in the open a frame after they asked to stay down.
+	if (!bCrouchRequested)
+	{
+		UnCrouch();
+	}
 
 	if (UEOFeedbackSubsystem* Feedback = UEOFeedbackSubsystem::Get(this))
 	{
@@ -631,7 +650,7 @@ void AEOOperativeCharacter::StopSlide()
 	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
 	{
 		Movement->MaxWalkSpeed = bSprinting ? SprintSpeed : WalkSpeed;
-		Movement->MaxWalkSpeedCrouched = SlideImpulse;
+		Movement->MaxWalkSpeedCrouched = CrouchSpeed;
 		Movement->GroundFriction = CachedGroundFriction;
 		Movement->BrakingDecelerationWalking = CachedBrakingDeceleration;
 	}
@@ -938,6 +957,7 @@ void AEOOperativeCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	Input->BindAction(Config->SprintAction, ETriggerEvent::Completed, this, &AEOOperativeCharacter::Input_SprintStop);
 	Input->BindAction(Config->SlideAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_SlideStart);
 	Input->BindAction(Config->SlideAction, ETriggerEvent::Completed, this, &AEOOperativeCharacter::Input_SlideStop);
+	Input->BindAction(Config->CrouchAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_CrouchToggle);
 	Input->BindAction(Config->TakedownAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_Takedown);
 	Input->BindAction(Config->FireAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_Fire);
 	Input->BindAction(Config->AimAction, ETriggerEvent::Started, this, &AEOOperativeCharacter::Input_AimStart);
@@ -1044,6 +1064,18 @@ void AEOOperativeCharacter::Input_SprintStart(const FInputActionValue& Value)
 	}
 
 	bSprinting = true;
+
+	// Nobody sprints crouched. Asking to run stands the operative up, which also
+	// means the sprint key is a way out of the stance without hunting for it.
+	if (bCrouchRequested)
+	{
+		bCrouchRequested = false;
+		if (!bSliding)
+		{
+			UnCrouch();
+		}
+	}
+
 	if (!bSliding)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
@@ -1066,10 +1098,9 @@ void AEOOperativeCharacter::Input_SlideStart(const FInputActionValue& Value)
 		return;
 	}
 
-	if (!TryStartSlide())
-	{
-		Crouch();
-	}
+	// Crouch has its own key now. A slide that cannot start is simply refused,
+	// rather than quietly becoming the other thing the player did not press.
+	TryStartSlide();
 }
 
 void AEOOperativeCharacter::Input_Takedown(const FInputActionValue& Value)
@@ -1142,9 +1173,36 @@ void AEOOperativeCharacter::Input_Interact(const FInputActionValue& Value)
 
 void AEOOperativeCharacter::Input_SlideStop(const FInputActionValue& Value)
 {
-	// Releasing crouch ends a slide early; the slide also ends on its own.
+	// Releasing the key ends a slide early; the slide also ends on its own.
 	StopSlide();
-	UnCrouch();
+}
+
+void AEOOperativeCharacter::Input_CrouchToggle(const FInputActionValue& Value)
+{
+	if (!HasControl() || IsDead())
+	{
+		return;
+	}
+
+	// A slide is already low and already committed. Pressing crouch during one
+	// sets the stance it will settle into rather than fighting it mid-slide.
+	bCrouchRequested = !bCrouchRequested;
+
+	if (bSliding)
+	{
+		return;
+	}
+
+	if (bCrouchRequested)
+	{
+		// Standing up to sprint is the rule, so asking to crouch drops the sprint
+		// rather than leaving a stance that outranks it.
+		Crouch();
+	}
+	else
+	{
+		UnCrouch();
+	}
 }
 
 void AEOOperativeCharacter::SetStowed_Implementation(bool bInStowed)

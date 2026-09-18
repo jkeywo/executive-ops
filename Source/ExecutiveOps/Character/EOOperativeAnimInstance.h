@@ -76,6 +76,17 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "State")
 	bool bIsSliding = false;
 
+	/**
+	 * Crouched, from the capsule rather than from the input, so a slide that
+	 * settles into a crouch reports the stance it is actually in.
+	 *
+	 * Combined with bIsAiming this is the crouch-aim case: the graph picks the
+	 * crouched strafe set when both are true, which is why they stay two flags
+	 * rather than one enum.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "State")
+	bool bIsCrouched = false;
+
 	// ---- Falling ---------------------------------------------------------------
 
 	/** How far the operative has dropped since leaving the ground, in centimetres. */

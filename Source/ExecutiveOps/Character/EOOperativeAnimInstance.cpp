@@ -66,6 +66,7 @@ void UEOOperativeAnimInstance::NativeThreadSafeUpdateAnimation(float DeltaSecond
 	bIsAiming = Operative->IsAiming();
 	bIsSprinting = Operative->IsSprinting();
 	bIsSliding = Operative->IsSliding();
+	bIsCrouched = Operative->bIsCrouched;
 
 	// ---- Falling ---------------------------------------------------------------
 

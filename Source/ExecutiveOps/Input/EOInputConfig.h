@@ -93,6 +93,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Input|Operative")
 	TObjectPtr<UInputAction> SlideAction;
 
+	/** Toggles the crouch stance. Separate from slide, which is a sprint that goes low. */
+	UPROPERTY(EditAnywhere, Category = "Input|Operative")
+	TObjectPtr<UInputAction> CrouchAction;
+
 	UPROPERTY(EditAnywhere, Category = "Input|Operative")
 	TObjectPtr<UInputAction> TakedownAction;
 

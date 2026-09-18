@@ -61,6 +61,9 @@ protected:
 	void Input_SprintStop(const FInputActionValue& Value);
 	void Input_SlideStart(const FInputActionValue& Value);
 	void Input_SlideStop(const FInputActionValue& Value);
+
+	/** Crouch is a stance the player leaves deliberately, so the key toggles it. */
+	void Input_CrouchToggle(const FInputActionValue& Value);
 	void Input_Takedown(const FInputActionValue& Value);
 	void Input_Fire(const FInputActionValue& Value);
 	void Input_AimStart(const FInputActionValue& Value);
@@ -297,6 +300,17 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0"))
 	float CameraFollowDeadZone = 6.f;
 
+	/**
+	 * Degrees past which a heading is not a veer and the view stays put.
+	 *
+	 * Walking toward the camera puts the heading 180 degrees from the view, and
+	 * without this the follow reads that as the widest veer it has ever seen and
+	 * whips the whole camera round. A right angle is the natural line: beyond it
+	 * the operative is moving away from where the player is looking on purpose.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0", ClampMax = "180"))
+	float CameraFollowMaxAngle = 90.f;
+
 	/** Seconds the auto-follow stays out of the way after a look input. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera|Follow", meta = (ClampMin = "0"))
 	float LookHoldTime = 0.6f;
@@ -324,6 +338,22 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement")
 	float SprintSpeed = 950.f;
+
+	/**
+	 * The floor an analogue stick moves at, and the blend space's walk sample.
+	 *
+	 * A keyboard can only ask for everything, so the walk sample was unreachable
+	 * and the operative had one gait. A stick asks for a fraction, and the
+	 * movement component scales the speed cap by how far it is pushed; this is
+	 * the bottom of that range, so the gentlest push is a walk rather than a
+	 * crawl nothing was captured at.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0"))
+	float WalkPaceSpeed = 180.f;
+
+	/** Crouched movement. Near the walk sample, because that is the clip it plays. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Movement", meta = (ClampMin = "0"))
+	float CrouchSpeed = 200.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Camera")
 	float LookSensitivity = 1.f;
@@ -454,6 +484,12 @@ private:
 	bool bDeploying = false;
 	bool bSprinting = false;
 	bool bSliding = false;
+
+	/**
+	 * Whether the player asked to be crouched, as opposed to a slide having put
+	 * them there. A slide ending must not stand up someone who chose to crouch.
+	 */
+	bool bCrouchRequested = false;
 	float SlideElapsed = 0.f;
 	FVector SlideDirection = FVector::ZeroVector;
 

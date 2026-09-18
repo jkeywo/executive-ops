@@ -44,6 +44,7 @@ ACTIONS = {
     "IA_Jump":           (BOOLEAN, "jump_action"),
     "IA_Sprint":         (BOOLEAN, "sprint_action"),
     "IA_Slide":          (BOOLEAN, "slide_action"),
+    "IA_Crouch":         (BOOLEAN, "crouch_action"),
     "IA_Takedown":       (BOOLEAN, "takedown_action"),
     "IA_Fire":           (BOOLEAN, "fire_action"),
     "IA_Aim":            (BOOLEAN, "aim_action"),
@@ -54,6 +55,11 @@ ACTIONS = {
 # feeds the Y of a 2D action - W/S drive forward/back, A/D drive left/right.
 NEG = "negate"
 SWZ = "swizzle"
+
+# Sticks rest off centre and drift with wear, so every analogue 2D binding gets
+# a dead zone. Radial rather than per-axis: a thumbstick's rest position is a
+# small circle, and treating X and Y separately leaves the corners live.
+DZ = "deadzone"
 
 # (action, key, modifiers). Same table as the C++ it replaces, row for row.
 # Look inversion is deliberately absent: it is applied where the value is
@@ -80,7 +86,7 @@ AIRCRAFT = [
     ("IA_ToggleMap",      "M",                         []),
     ("IA_Look",           "Mouse2D",                   []),
     # Gamepad mirrors the keyboard rather than inventing a second scheme.
-    ("IA_FlightMove",     "Gamepad_Left2D",            []),
+    ("IA_FlightMove",     "Gamepad_Left2D",            [DZ]),
     ("IA_ThrottleUp",     "Gamepad_DPad_Up",           []),
     ("IA_ThrottleDown",   "Gamepad_DPad_Down",         []),
     ("IA_FlightVertical", "Gamepad_RightTriggerAxis",  []),
@@ -90,7 +96,7 @@ AIRCRAFT = [
     ("IA_Hover",          "Gamepad_FaceButton_Left",   []),
     ("IA_Deploy",         "Gamepad_FaceButton_Bottom", []),
     ("IA_ToggleMap",      "Gamepad_FaceButton_Top",    []),
-    ("IA_LookStick",      "Gamepad_Right2D",           []),
+    ("IA_LookStick",      "Gamepad_Right2D",           [DZ]),
 ]
 
 OPERATIVE = [
@@ -102,21 +108,26 @@ OPERATIVE = [
     ("IA_Sprint",    "LeftShift",                 []),
     # Jump is the contextual parkour button; the decision lives in one handler.
     ("IA_Slide",     "LeftControl",               []),
-    ("IA_Slide",     "C",                         []),
+    # Crouch is its own stance, not the thing a failed slide falls back to, so
+    # it has its own key and toggles rather than being held.
+    ("IA_Crouch",    "C",                         []),
     ("IA_Takedown",  "F",                         []),
     ("IA_Fire",      "LeftMouseButton",           []),
     ("IA_Aim",       "RightMouseButton",          []),
     ("IA_Interact",  "E",                         []),
     ("IA_Look",      "Mouse2D",                   []),
-    ("IA_Move",      "Gamepad_Left2D",            []),
+    # The stick is the only way to ask for a walk: how far it is pushed scales
+    # the speed cap, and the keyboard can only ever ask for all of it.
+    ("IA_Move",      "Gamepad_Left2D",            [DZ]),
     ("IA_Jump",      "Gamepad_FaceButton_Bottom", []),
     ("IA_Slide",     "Gamepad_FaceButton_Right",  []),
     ("IA_Takedown",  "Gamepad_FaceButton_Top",    []),
     ("IA_Interact",  "Gamepad_FaceButton_Left",   []),
     ("IA_Sprint",    "Gamepad_LeftThumbstick",    []),
+    ("IA_Crouch",    "Gamepad_RightThumbstick",   []),
     ("IA_Aim",       "Gamepad_LeftTrigger",       []),
     ("IA_Fire",      "Gamepad_RightTrigger",      []),
-    ("IA_LookStick", "Gamepad_Right2D",           []),
+    ("IA_LookStick", "Gamepad_Right2D",           [DZ]),
 ]
 
 CONTEXTS = {
@@ -157,6 +168,14 @@ def make_modifier(kind, outer):
     if kind == SWZ:
         modifier = unreal.new_object(unreal.InputModifierSwizzleAxis, outer=outer)
         modifier.set_editor_property("order", unreal.InputAxisSwizzle.YXZ)
+        return modifier
+    if kind == DZ:
+        modifier = unreal.new_object(unreal.InputModifierDeadZone, outer=outer)
+        modifier.set_editor_property("type", unreal.DeadZoneType.RADIAL)
+        # The lower bound is the drift; the upper one rescales what is left so a
+        # fully pushed stick still reads as 1 and can still reach a sprint.
+        modifier.set_editor_property("lower_threshold", 0.18)
+        modifier.set_editor_property("upper_threshold", 1.0)
         return modifier
     raise ValueError(kind)
 
